@@ -14,8 +14,11 @@ export interface CashRegister {
   id: string;
   date: string;
   opening_cash: number;
+  opening_card: number;
   closing_cash: number | null;
+  closing_card: number | null;
   expected_cash: number | null;
+  expected_card: number | null;
   difference: number | null;
   total_sales: number;
   total_cash_sales: number;
@@ -110,7 +113,7 @@ export function useTodayMovements() {
 export function useOpenRegister() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ opening_cash, notes }: { opening_cash: number; notes?: string }) => {
+    mutationFn: async ({ opening_cash, opening_card = 0, notes }: { opening_cash: number; opening_card?: number; notes?: string }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
@@ -118,6 +121,7 @@ export function useOpenRegister() {
         .insert({
           date: todayLocal(),
           opening_cash,
+          opening_card,
           notes: notes ?? null,
           opened_by: user?.id ?? null,
         })
@@ -132,51 +136,59 @@ export function useOpenRegister() {
   });
 }
 
-export function useCloseRegister() {
+export function useReopenRegister() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      id,
-      closing_cash,
-      expected_cash,
-      total_sales,
-      total_cash_sales,
-      total_card_sales,
-      total_transfer_sales,
-      notes,
-    }: {
-      id: string;
-      closing_cash: number;
-      expected_cash: number;
-      total_sales: number;
-      total_cash_sales: number;
-      total_card_sales: number;
-      total_transfer_sales: number;
-      notes?: string;
-    }) => {
+    mutationFn: async (id: string) => {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      const difference = closing_cash - expected_cash;
       const { error } = await supabase
         .from("cash_registers")
         .update({
-          closing_cash,
-          expected_cash,
-          difference,
-          total_sales,
-          total_cash_sales,
-          total_card_sales,
-          total_transfer_sales,
-          closed_by: user?.id ?? null,
-          notes: notes ?? null,
+          closing_cash: null,
+          closing_card: null,
+          expected_cash: null,
+          expected_card: null,
+          difference: null,
+          closed_by: null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["caja-register"] });
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["caja-register"] }),
+  });
+}
+
+export function useCloseRegister() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id, closing_cash, closing_card = 0,
+      expected_cash, expected_card = 0,
+      total_sales, total_cash_sales, total_card_sales, total_transfer_sales,
+      notes,
+    }: {
+      id: string; closing_cash: number; closing_card?: number;
+      expected_cash: number; expected_card?: number;
+      total_sales: number; total_cash_sales: number;
+      total_card_sales: number; total_transfer_sales: number;
+      notes?: string;
+    }) => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const difference = (closing_cash - expected_cash) + (closing_card - expected_card);
+      const { error } = await supabase
+        .from("cash_registers")
+        .update({
+          closing_cash, closing_card, expected_cash, expected_card,
+          difference, total_sales, total_cash_sales, total_card_sales,
+          total_transfer_sales, closed_by: user?.id ?? null,
+          notes: notes ?? null, updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+      if (error) throw error;
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["caja-register"] }),
   });
 }
 

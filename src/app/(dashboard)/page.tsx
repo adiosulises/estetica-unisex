@@ -5,18 +5,29 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, ShoppingCart, Banknote,
-  AlertTriangle, ArrowRight, Package,
+  AlertTriangle, ArrowRight, Package, Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { useConfig } from "@/hooks/use-configuracion";
 
 const TZ = "America/Hermosillo";
+
 function todayLocal() {
   return new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 }
 function monthStart() {
   const d = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+function daysRemainingInMonth(): number {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return last - now.getDate() + 1; // includes today
+}
+function daysInCurrentMonth(): number {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -50,10 +61,10 @@ function useDashboardStats() {
           .select("sale_item_id"),
       ]);
 
-      const paidSet = new Set((paidRes.data ?? []).map((p: any) => p.sale_item_id));
+      const paidSet   = new Set((paidRes.data ?? []).map((p: any) => p.sale_item_id));
       const todaySales = todayRes.data ?? [];
       const monthSales = monthRes.data ?? [];
-      const unpaid = (pendingRes.data ?? []).filter((i: any) => !paidSet.has(i.id));
+      const unpaid     = (pendingRes.data ?? []).filter((i: any) => !paidSet.has(i.id));
 
       return {
         today_total:    todaySales.reduce((s, r) => s + Number(r.total), 0),
@@ -67,6 +78,69 @@ function useDashboardStats() {
       };
     },
     staleTime: 60_000,
+  });
+}
+
+function useLastMonthStats() {
+  return useQuery({
+    queryKey: ["dashboard-last-month"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+      const year  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      const month = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-based
+      const from  = `${year}-${String(month).padStart(2, "0")}-01`;
+      const days  = new Date(year, month, 0).getDate();
+      const to    = `${year}-${String(month).padStart(2, "0")}-${days}`;
+
+      const { data, error } = await supabase
+        .from("sales")
+        .select("total")
+        .eq("status", "completed")
+        .gte("created_at", `${from}T00:00:00-07:00`)
+        .lte("created_at", `${to}T23:59:59-07:00`);
+      if (error) throw error;
+      return (data ?? []).reduce((s, r) => s + Number(r.total), 0);
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+function useDayOfWeekStats() {
+  return useQuery({
+    queryKey: ["dashboard-dow"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - 90);
+      const fromDate = cutoff.toLocaleDateString("en-CA", { timeZone: TZ });
+
+      const { data, error } = await supabase
+        .from("sales")
+        .select("total, created_at")
+        .eq("status", "completed")
+        .gte("created_at", `${fromDate}T00:00:00-07:00`);
+      if (error) throw error;
+
+      // Group by local day of week
+      const totals: Record<number, number> = { 0:0,1:0,2:0,3:0,4:0,5:0,6:0 };
+      const uniqueDays: Record<number, Set<string>> = { 0:new Set(),1:new Set(),2:new Set(),3:new Set(),4:new Set(),5:new Set(),6:new Set() };
+
+      for (const sale of data ?? []) {
+        const localDate = new Date(sale.created_at).toLocaleDateString("en-CA", { timeZone: TZ });
+        // day of week from the local date string
+        const dow = new Date(localDate + "T12:00:00").getDay();
+        totals[dow] += Number(sale.total);
+        uniqueDays[dow].add(localDate);
+      }
+
+      const labels = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+      return labels.map((label, dow) => ({
+        label,
+        avg: uniqueDays[dow].size > 0 ? totals[dow] / uniqueDays[dow].size : 0,
+      }));
+    },
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -115,6 +189,7 @@ function useDashboardRealtime() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "sales" }, () => {
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
         qc.invalidateQueries({ queryKey: ["dashboard-recent-sales"] });
+        qc.invalidateQueries({ queryKey: ["dashboard-dow"] });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "product_variants" }, () => {
         qc.invalidateQueries({ queryKey: ["dashboard-low-stock"] });
@@ -127,9 +202,25 @@ function useDashboardRealtime() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   useDashboardRealtime();
-  const { data: stats } = useDashboardStats();
-  const { data: lowStock = [] } = useLowStock();
+  const { data: stats }           = useDashboardStats();
+  const { data: lastMonth = 0 }   = useLastMonthStats();
+  const { data: dow = [] }        = useDayOfWeekStats();
+  const { data: lowStock = [] }   = useLowStock();
   const { data: recentSales = [] } = useRecentSales();
+  const { data: config }          = useConfig();
+
+  const monthlyGoal   = config?.monthly_goal ?? 0;
+  const monthTotal    = stats?.month_total ?? 0;
+  const goalPct       = monthlyGoal > 0 ? Math.min(100, (monthTotal / monthlyGoal) * 100) : 0;
+  const remaining     = Math.max(0, monthlyGoal - monthTotal);
+  const daysLeft      = daysRemainingInMonth();
+  const dailyTarget   = daysLeft > 0 ? remaining / daysLeft : 0;
+
+  const monthChange   = lastMonth > 0
+    ? ((monthTotal - lastMonth) / lastMonth) * 100
+    : null;
+
+  const maxDow = Math.max(...dow.map((d) => d.avg), 1);
 
   const dateLabel = new Date().toLocaleDateString("es-MX", {
     weekday: "long", day: "numeric", month: "long", timeZone: TZ,
@@ -137,6 +228,7 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-6">
+      {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-[var(--foreground)]">Dashboard</h1>
         <p className="text-sm text-[var(--muted-foreground)] capitalize">{dateLabel}</p>
@@ -153,10 +245,13 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Ventas del mes"
-          value={formatCurrency(stats?.month_total ?? 0)}
+          value={formatCurrency(monthTotal)}
           sub={`${stats?.month_count ?? 0} ventas`}
           icon={<TrendingUp size={18} />}
           color="green"
+          badge={monthChange !== null
+            ? { label: `${monthChange >= 0 ? "+" : ""}${monthChange.toFixed(0)}% vs mes ant.`, positive: monthChange >= 0 }
+            : undefined}
         />
         <StatCard
           label="Pendiente marcas"
@@ -176,6 +271,44 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* ── Goal progress ──────────────────────────────────────────────────── */}
+      {monthlyGoal > 0 && (
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Target size={15} className="text-[var(--primary)]" />
+              <p className="text-sm font-semibold text-[var(--foreground)]">Meta mensual</p>
+            </div>
+            <span className="text-sm font-bold font-mono text-[var(--primary)]">{goalPct.toFixed(1)}%</span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-2.5 bg-[var(--muted)] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[var(--primary)] rounded-full transition-all duration-500"
+              style={{ width: `${goalPct}%` }}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div>
+              <p className="text-[var(--muted-foreground)]">Vendido</p>
+              <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(monthTotal)}</p>
+            </div>
+            <div>
+              <p className="text-[var(--muted-foreground)]">Meta</p>
+              <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(monthlyGoal)}</p>
+            </div>
+            <div>
+              <p className="text-[var(--muted-foreground)]">Meta/día restante</p>
+              <p className={`font-bold font-mono ${dailyTarget > 0 ? "text-amber-600" : "text-green-600"}`}>
+                {formatCurrency(dailyTarget)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Today breakdown ────────────────────────────────────────────────── */}
       {(stats?.today_total ?? 0) > 0 && (
         <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
@@ -190,6 +323,38 @@ export default function DashboardPage() {
             {stats!.today_transfer > 0 && (
               <MethodBar label="Transferencia" amount={stats!.today_transfer} total={stats!.today_total} color="purple" />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Day of week pattern ────────────────────────────────────────────── */}
+      {dow.some((d) => d.avg > 0) && (
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+          <p className="text-sm font-semibold text-[var(--foreground)] mb-4">Ventas promedio por día (90 días)</p>
+          <div className="flex items-end gap-2 h-24">
+            {dow.map((d) => {
+              const height = maxDow > 0 ? (d.avg / maxDow) * 100 : 0;
+              const isToday = new Date().toLocaleDateString("en-CA", { timeZone: TZ }) &&
+                d.label === ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date().getDay()];
+              return (
+                <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
+                  <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                    <div
+                      className={`w-full rounded-t-md transition-all ${isToday ? "bg-[var(--primary)]" : "bg-[var(--primary)]/30"}`}
+                      style={{ height: `${Math.max(height, d.avg > 0 ? 4 : 0)}%` }}
+                      title={formatCurrency(d.avg)}
+                    />
+                  </div>
+                  <span className={`text-[10px] font-medium ${isToday ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}>
+                    {d.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between mt-1 text-[10px] text-[var(--muted-foreground)]">
+            <span>$0</span>
+            <span>{formatCurrency(maxDow)} máx.</span>
           </div>
         </div>
       )}
@@ -276,10 +441,11 @@ const colorMap = {
 };
 
 function StatCard({
-  label, value, sub, icon, color, href,
+  label, value, sub, icon, color, href, badge,
 }: {
   label: string; value: string; sub: string;
   icon: React.ReactNode; color: keyof typeof colorMap; href?: string;
+  badge?: { label: string; positive: boolean };
 }) {
   const { bg, text } = colorMap[color];
   const inner = (
@@ -291,6 +457,11 @@ function StatCard({
         <p className="text-xs text-[var(--muted-foreground)]">{label}</p>
         <p className="text-xl font-bold font-mono text-[var(--foreground)] leading-tight">{value}</p>
         <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{sub}</p>
+        {badge && (
+          <span className={`inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${badge.positive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+            {badge.label}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -300,7 +471,7 @@ function StatCard({
 function MethodBar({ label, amount, total, color }: {
   label: string; amount: number; total: number; color: "green" | "blue" | "purple";
 }) {
-  const pct = total > 0 ? (amount / total) * 100 : 0;
+  const pct  = total > 0 ? (amount / total) * 100 : 0;
   const bar  = color === "green" ? "bg-green-500" : color === "blue" ? "bg-blue-500" : "bg-[var(--primary)]";
   const text = color === "green" ? "text-green-600" : color === "blue" ? "text-blue-600" : "text-[var(--primary)]";
   return (

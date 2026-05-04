@@ -16,6 +16,7 @@ import {
   UserCog,
   Bookmark,
   CalendarDays,
+  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -37,7 +38,8 @@ const navItems = [
   { href: "/sueldos", label: "Sueldos", icon: DollarSign },
   { href: "/empleados", label: "Empleados", icon: UserCog },
   { href: "/apartados", label: "Apartados", icon: Bookmark },
-  { href: "/eventos", label: "Eventos", icon: CalendarDays },
+  { href: "/eventos",       label: "Eventos",       icon: CalendarDays },
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
 interface SidebarProps {
