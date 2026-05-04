@@ -141,7 +141,7 @@ export function useCreateSale() {
         p_paid_cash: payload.paid_cash,
         p_paid_card: payload.paid_card,
         p_paid_transfer: payload.paid_transfer,
-        p_notes: payload.notes ?? null,
+        p_notes: payload.notes ?? undefined,
       });
       if (error) throw error;
       return data as SaleResult;
