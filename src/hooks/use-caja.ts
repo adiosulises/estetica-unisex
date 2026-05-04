@@ -118,14 +118,13 @@ export function useOpenRegister() {
       const { data: { user } } = await supabase.auth.getUser();
       const { data, error } = await supabase
         .from("cash_registers")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .insert({
           date: todayLocal(),
           opening_cash,
           opening_card,
           notes: notes ?? null,
           opened_by: user?.id ?? null,
-        } as any)
+        })
         .select()
         .single();
       if (error) throw error;
@@ -144,7 +143,6 @@ export function useReopenRegister() {
       const supabase = createClient();
       const { error } = await supabase
         .from("cash_registers")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({
           closing_cash: null,
           closing_card: null,
@@ -153,7 +151,7 @@ export function useReopenRegister() {
           difference: null,
           closed_by: null,
           updated_at: new Date().toISOString(),
-        } as any)
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -181,13 +179,12 @@ export function useCloseRegister() {
       const difference = (closing_cash - expected_cash) + (closing_card - expected_card);
       const { error } = await supabase
         .from("cash_registers")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .update({
           closing_cash, closing_card, expected_cash, expected_card,
           difference, total_sales, total_cash_sales, total_card_sales,
           total_transfer_sales, closed_by: user?.id ?? null,
           notes: notes ?? null, updated_at: new Date().toISOString(),
-        } as any)
+        })
         .eq("id", id);
       if (error) throw error;
     },
@@ -211,14 +208,13 @@ export function useAddMovement() {
     }) => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase.from("cash_movements").insert({
-        type,
+        type: type as "sale" | "brand_payment" | "floor_income" | "salary" | "rent" | "maintenance" | "savings" | "debt_payment" | "construction" | "production_reimbursement" | "event_income" | "deposit" | "withdrawal" | "adjustment",
         amount,
         description,
-        payment_method: payment_method ?? null,
+        payment_method: (payment_method ?? null) as "cash" | "card" | "transfer" | "mixed" | null,
         employee_id: user?.id ?? null,
-      } as any);
+      });
       if (error) throw error;
     },
     onSuccess: () => {

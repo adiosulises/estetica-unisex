@@ -49,7 +49,6 @@ export function usePendingByBrand() {
     queryFn: async (): Promise<BrandPending[]> => {
       const supabase = createClient();
 
-      // sale_items that are NOT yet referenced by any brand_payout_items
       const { data, error } = await supabase
         .from("sale_items")
         .select(`
@@ -63,7 +62,6 @@ export function usePendingByBrand() {
 
       if (error) throw error;
 
-      // Get already paid sale_item ids
       const { data: paidItems, error: paidErr } = await supabase
         .from("brand_payout_items")
         .select("sale_item_id");
@@ -71,7 +69,6 @@ export function usePendingByBrand() {
 
       const paidSet = new Set((paidItems ?? []).map((p: any) => p.sale_item_id));
 
-      // Filter unpaid and aggregate by brand
       const map = new Map<string, BrandPending>();
       for (const item of data ?? []) {
         if (paidSet.has(item.id)) continue;
@@ -184,13 +181,15 @@ export function useCreatePayout() {
     mutationFn: async ({ brand_id, items, payment_method, notes }: CreatePayoutPayload) => {
       const supabase = createClient();
 
-      const total_sold = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
+      const total_sold   = items.reduce((s, i) => s + i.unit_price * i.quantity, 0);
       const brand_amount = items.reduce((s, i) => s + i.brand_amount, 0);
       const store_amount = total_sold - brand_amount;
 
-      const dates = items.map((i) => i.sale_date).sort();
+      const dates        = items.map((i) => i.sale_date).sort();
       const period_start = dates[0]?.slice(0, 10) ?? new Date().toISOString().slice(0, 10);
       const period_end   = dates[dates.length - 1]?.slice(0, 10) ?? period_start;
+
+      const pm = payment_method as "cash" | "card" | "transfer" | "mixed";
 
       // 1. Create brand_payout record
       const { data: payout, error: payoutErr } = await supabase
@@ -202,9 +201,9 @@ export function useCreatePayout() {
           total_sold,
           brand_amount,
           store_amount,
-          status: "paid",
+          status: "paid" as const,
           paid_at: new Date().toISOString(),
-          payment_method,
+          payment_method: pm,
           notes: notes ?? null,
         })
         .select()
@@ -226,12 +225,12 @@ export function useCreatePayout() {
 
       // 3. Record cash movement (negative = salida de dinero)
       const { error: mvErr } = await supabase.from("cash_movements").insert({
-        type: "brand_payment",
+        type: "brand_payment" as const,
         amount: -brand_amount,
         description: `Liquidación marca — ${period_start} a ${period_end}`,
         reference_id: payout.id,
         reference_type: "brand_payout",
-        payment_method,
+        payment_method: pm,
       });
       if (mvErr) throw mvErr;
 

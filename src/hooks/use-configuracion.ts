@@ -26,7 +26,7 @@ export function useConfig() {
         .select("*")
         .single();
       if (error) throw error;
-      return data as unknown as Config;
+      return data as Config;
     },
     staleTime: 5 * 60_000,
   });
@@ -42,10 +42,9 @@ export function useUpdateConfig() {
         .select("id")
         .single();
       if (!existing) throw new Error("No config found");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await supabase
         .from("payroll_config")
-        .update({ ...values, updated_at: new Date().toISOString() } as any)
+        .update({ ...values, updated_at: new Date().toISOString() })
         .eq("id", existing.id);
       if (error) throw error;
     },
