@@ -144,7 +144,7 @@ export function useCreateSale() {
         p_notes: payload.notes ?? undefined,
       });
       if (error) throw error;
-      return data as SaleResult;
+      return data as unknown as SaleResult;
     },
     onSuccess: () => {
       // Invalidar inventario para reflejar el stock descontado
