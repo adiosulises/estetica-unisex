@@ -33,7 +33,7 @@ const navItems = [
   { href: "/caja", label: "Caja", icon: Wallet },
   { href: "/historial", label: "Historial ventas", icon: Receipt },
   { href: "/transacciones", label: "Transacciones", icon: ArrowLeftRight },
-  { href: "/marcas/pagos", label: "Pagos a marcas", icon: Banknote },
+  { href: "/liquidaciones", label: "Liquidaciones", icon: Banknote },
   { href: "/sueldos", label: "Sueldos", icon: DollarSign },
   { href: "/empleados", label: "Empleados", icon: UserCog },
   { href: "/apartados", label: "Apartados", icon: Bookmark },
