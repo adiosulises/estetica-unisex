@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Receipt, Banknote, CreditCard, ArrowLeftRight, ChevronDown, ChevronUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
@@ -85,6 +85,28 @@ function useSaleItems(saleId: string | null) {
   });
 }
 
+// ─── Realtime subscription ────────────────────────────────────────────────────
+function useSalesRealtime() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel("sales-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sales" },
+        () => {
+          // Invalidate all historial queries so the list refreshes automatically
+          qc.invalidateQueries({ queryKey: ["historial-sales"] });
+          qc.invalidateQueries({ queryKey: ["caja-sales-today"] });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [qc]);
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function HistorialPage() {
   const [search, setSearch] = useState("");
@@ -92,6 +114,7 @@ export default function HistorialPage() {
   const [dateTo, setDateTo] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  useSalesRealtime(); // 🔴 live updates
   const { data: sales = [], isLoading } = useSales(search, dateFrom, dateTo);
 
   const totalShown = sales.reduce((s, sale) => s + sale.total, 0);
