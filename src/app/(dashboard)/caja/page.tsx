@@ -1,15 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Wallet, TrendingUp, Banknote, CreditCard, ArrowLeftRight,
   Plus, Minus, CheckCircle2, Lock, ChevronDown, ChevronUp,
-  Loader2, Unlock, AlertTriangle,
+  Loader2, Unlock, AlertTriangle, History,
 } from "lucide-react";
 import {
   useTodayRegister, useTodaySales, useTodayMovements,
   useOpenRegister, useCloseRegister, useReopenRegister, useAddMovement,
 } from "@/hooks/use-caja";
+import { useMyRole } from "@/hooks/use-my-role";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 
@@ -41,9 +43,11 @@ export default function CajaPage() {
   const { data: register, isLoading } = useTodayRegister();
   const { data: sales } = useTodaySales();
   const { data: movements = [] } = useTodayMovements();
+  const { data: role } = useMyRole();
 
-  const isClosed = register && register.closing_cash !== null;
-  const isOpen   = register && register.closing_cash === null;
+  const isClosed  = register && register.closing_cash !== null;
+  const isOpen    = register && register.closing_cash === null;
+  const isAdmin   = role === "admin" || role === "god";
 
   if (isLoading) {
     return (
@@ -55,9 +59,20 @@ export default function CajaPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
-      <div>
-        <h1 className="text-xl font-bold text-[var(--foreground)]">Caja</h1>
-        <p className="text-sm text-[var(--muted-foreground)] capitalize">{TODAY_LABEL}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">Caja</h1>
+          <p className="text-sm text-[var(--muted-foreground)] capitalize">{TODAY_LABEL}</p>
+        </div>
+        {isAdmin && (
+          <Link
+            href="/caja/historial"
+            className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors px-3 py-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)]"
+          >
+            <History size={13} />
+            Historial
+          </Link>
+        )}
       </div>
 
       {!register && <OpenCajaCard />}

@@ -222,3 +222,63 @@ export function useAddMovement() {
     },
   });
 }
+
+// ─── Historial de cajas ───────────────────────────────────────────────────────
+
+export interface CashRegisterHistoryRow extends CashRegister {
+  opened_by_name: string | null;
+  closed_by_name: string | null;
+}
+
+export function useCajaHistory(month: string) {
+  return useQuery({
+    queryKey: ["caja-history", month],
+    queryFn: async (): Promise<CashRegisterHistoryRow[]> => {
+      if (!month) return [];
+      const supabase = createClient();
+      const [y, m] = month.split("-").map(Number);
+      const start = new Date(y, m - 1, 1).toLocaleDateString("en-CA", { timeZone: TZ });
+      const end   = new Date(y, m, 0).toLocaleDateString("en-CA", { timeZone: TZ });
+
+      const { data, error } = await supabase
+        .from("cash_registers")
+        .select(`
+          *,
+          opened_by_emp:employees!cash_registers_opened_by_fkey(full_name),
+          closed_by_emp:employees!cash_registers_closed_by_fkey(full_name)
+        `)
+        .gte("date", start)
+        .lte("date", end)
+        .order("date", { ascending: false });
+      if (error) throw error;
+
+      return (data ?? []).map((r: any) => ({
+        ...r,
+        opened_by_name: r.opened_by_emp?.full_name ?? null,
+        closed_by_name: r.closed_by_emp?.full_name ?? null,
+      })) as CashRegisterHistoryRow[];
+    },
+    staleTime: 60_000,
+    enabled: !!month,
+  });
+}
+
+export function useDayMovements(date: string | null) {
+  return useQuery({
+    queryKey: ["caja-movements-day", date],
+    queryFn: async (): Promise<CashMovement[]> => {
+      if (!date) return [];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("cash_movements")
+        .select("*")
+        .gte("created_at", `${date}T00:00:00-07:00`)
+        .lte("created_at", `${date}T23:59:59-07:00`)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CashMovement[];
+    },
+    enabled: !!date,
+    staleTime: 60_000,
+  });
+}
