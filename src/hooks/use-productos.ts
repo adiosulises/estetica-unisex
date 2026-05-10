@@ -158,11 +158,66 @@ export function useUpdateVariante() {
 export function useUpdateProducto(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: Partial<Pick<Producto, "name" | "description" | "category" | "base_price" | "is_active">>) => {
+    mutationFn: async ({
+      data,
+      photoFile,
+    }: {
+      data: Partial<Pick<Producto, "name" | "description" | "category" | "base_price" | "brand_id" | "is_active" | "photo_url">>;
+      photoFile?: File | null;
+    }) => {
+      const supabase = createClient();
+      let photo_url = data.photo_url;
+
+      if (photoFile) {
+        const ext = photoFile.name.split(".").pop();
+        const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("product-photos")
+          .upload(path, photoFile, { upsert: false });
+        if (upErr) throw upErr;
+        const { data: urlData } = supabase.storage
+          .from("product-photos")
+          .getPublicUrl(path);
+        photo_url = urlData.publicUrl;
+      }
+
+      const { error } = await supabase
+        .from("products")
+        .update({ ...data, ...(photo_url !== undefined ? { photo_url } : {}) })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QK] });
+    },
+  });
+}
+
+export function useDeleteProducto() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
       const supabase = createClient();
       const { error } = await supabase
         .from("products")
-        .update(data)
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QK] });
+    },
+  });
+}
+
+export function useDeleteVariante() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("product_variants")
+        .update({ is_active: false })
         .eq("id", id);
       if (error) throw error;
     },

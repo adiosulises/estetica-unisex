@@ -1,16 +1,24 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, Plus, Tag } from "lucide-react";
-import { useProducto, useUpdateVariante, useUpdateProducto, useAddVariante } from "@/hooks/use-productos";
+import { ArrowLeft, Pencil, Plus, Tag, Trash2, Upload, X } from "lucide-react";
+import {
+  useProducto,
+  useUpdateVariante,
+  useUpdateProducto,
+  useAddVariante,
+  useDeleteProducto,
+  useDeleteVariante,
+} from "@/hooks/use-productos";
+import { useMarcas } from "@/hooks/use-marcas";
 import { StockBadge } from "@/components/inventario/stock-badge";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { getStockStatus } from "@/types/inventario";
-import type { Variante } from "@/types/inventario";
+import type { Producto, Variante } from "@/types/inventario";
 
 export default function ProductoDetallePage({
   params,
@@ -21,11 +29,16 @@ export default function ProductoDetallePage({
   const router = useRouter();
   const [editingVariant, setEditingVariant] = useState<Variante | null>(null);
   const [addingVariant, setAddingVariant] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
 
   const { data: producto, isLoading, error } = useProducto(id);
   const updateVariante = useUpdateVariante();
   const updateProducto = useUpdateProducto(id);
   const addVariante = useAddVariante(id);
+  const deleteProducto = useDeleteProducto();
+  const deleteVariante = useDeleteVariante();
 
   if (isLoading) return <div className="p-6 text-sm text-[var(--muted-foreground)]">Cargando...</div>;
   if (error || !producto) return (
@@ -35,7 +48,18 @@ export default function ProductoDetallePage({
     </div>
   );
 
-  const variants = producto.product_variants ?? [];
+  // Only show active variants
+  const variants = (producto.product_variants ?? []).filter((v) => v.is_active);
+
+  async function handleDeleteProduct() {
+    await deleteProducto.mutateAsync(id);
+    router.push("/inventario");
+  }
+
+  async function handleDeleteVariant(variantId: string) {
+    await deleteVariante.mutateAsync(variantId);
+    setDeletingVariantId(null);
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -79,7 +103,7 @@ export default function ProductoDetallePage({
             <p className="text-sm text-[var(--muted-foreground)] mt-1">{producto.description}</p>
           )}
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 items-start">
           <Button
             variant="secondary"
             size="sm"
@@ -87,6 +111,22 @@ export default function ProductoDetallePage({
           >
             <Tag size={14} />
             Etiquetas
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setEditingProduct(true)}
+          >
+            <Pencil size={14} />
+            Editar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirmDelete(true)}
+            className="text-[var(--destructive)] hover:bg-red-50"
+          >
+            <Trash2 size={14} />
           </Button>
         </div>
       </div>
@@ -136,15 +176,49 @@ export default function ProductoDetallePage({
                   <StockBadge status={getStockStatus(v)} />
                 </td>
                 <td className="px-4 py-3">
-                  <Button size="sm" variant="ghost" onClick={() => setEditingVariant(v)}>
-                    <Pencil size={13} />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditingVariant(v)}>
+                      <Pencil size={13} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeletingVariantId(v.id)}
+                      className="text-[var(--destructive)] hover:bg-red-50"
+                    >
+                      <Trash2 size={13} />
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
+            {variants.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--muted-foreground)]">
+                  Sin variantes activas
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Modal editar producto */}
+      <Modal
+        open={editingProduct}
+        onClose={() => setEditingProduct(false)}
+        title="Editar producto"
+        size="sm"
+      >
+        <EditProductoForm
+          producto={producto}
+          onSave={async (data, photoFile) => {
+            await updateProducto.mutateAsync({ data, photoFile });
+            setEditingProduct(false);
+          }}
+          onCancel={() => setEditingProduct(false)}
+        />
+      </Modal>
 
       {/* Modal editar variante */}
       <Modal
@@ -181,6 +255,59 @@ export default function ProductoDetallePage({
           }}
           onCancel={() => setAddingVariant(false)}
         />
+      </Modal>
+
+      {/* Confirm delete product */}
+      <Modal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        title="¿Eliminar producto?"
+        size="sm"
+      >
+        <div className="p-6 flex flex-col gap-4">
+          <p className="text-sm text-[var(--foreground)]">
+            Se eliminará <span className="font-semibold">{producto.name}</span> y todas sus variantes.
+            Esta acción no se puede deshacer fácilmente.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setConfirmDelete(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDeleteProduct}
+              disabled={deleteProducto.isPending}
+              className="bg-[var(--destructive)] hover:bg-red-700 text-white"
+            >
+              {deleteProducto.isPending ? "Eliminando..." : "Sí, eliminar"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm delete variant */}
+      <Modal
+        open={!!deletingVariantId}
+        onClose={() => setDeletingVariantId(null)}
+        title="¿Eliminar variante?"
+        size="sm"
+      >
+        <div className="p-6 flex flex-col gap-4">
+          <p className="text-sm text-[var(--foreground)]">
+            La variante se desactivará y dejará de aparecer en el inventario y el POS.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeletingVariantId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => deletingVariantId && handleDeleteVariant(deletingVariantId)}
+              disabled={deleteVariante.isPending}
+              className="bg-[var(--destructive)] hover:bg-red-700 text-white"
+            >
+              {deleteVariante.isPending ? "Eliminando..." : "Sí, eliminar"}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
@@ -224,6 +351,147 @@ function InlineStockEdit({ value, onSave }: { value: number; onSave: (v: number)
     </button>
   );
 }
+
+// ─── Edit Producto Form ───────────────────────────────────────────────────────
+
+function EditProductoForm({
+  producto,
+  onSave,
+  onCancel,
+}: {
+  producto: Producto;
+  onSave: (
+    data: Partial<Pick<Producto, "name" | "description" | "category" | "base_price" | "brand_id" | "photo_url">>,
+    photoFile?: File | null
+  ) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const { data: marcas } = useMarcas();
+  const [name, setName] = useState(producto.name);
+  const [category, setCategory] = useState(producto.category);
+  const [basePrice, setBasePrice] = useState(String(producto.base_price));
+  const [description, setDescription] = useState(producto.description ?? "");
+  const [brandId, setBrandId] = useState(producto.brand_id ?? "");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(producto.photo_url);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    await onSave(
+      {
+        name: name.trim(),
+        category: category.trim(),
+        base_price: parseFloat(basePrice) || 0,
+        description: description.trim() || null,
+        brand_id: brandId || null,
+      },
+      photoFile
+    );
+    setSaving(false);
+  }
+
+  return (
+    <div className="p-6 flex flex-col gap-4">
+      {/* Foto */}
+      <div className="flex items-center gap-4">
+        <div
+          className="w-20 h-20 rounded-xl bg-[var(--muted)] border border-[var(--border)] overflow-hidden flex items-center justify-center cursor-pointer relative group flex-shrink-0"
+          onClick={() => fileRef.current?.click()}
+        >
+          {photoPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoPreview} alt="foto" className="w-full h-full object-cover" />
+          ) : (
+            <Tag size={24} className="text-[var(--muted-foreground)] opacity-40" />
+          )}
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+            <Upload size={18} className="text-white" />
+          </div>
+        </div>
+        <div className="flex-1">
+          <p className="text-sm font-medium text-[var(--foreground)] mb-1">Foto del producto</p>
+          <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()}>
+            <Upload size={13} />
+            {photoPreview ? "Cambiar foto" : "Subir foto"}
+          </Button>
+          {photoPreview && photoPreview !== producto.photo_url && (
+            <button
+              className="ml-2 text-xs text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-colors"
+              onClick={() => { setPhotoFile(null); setPhotoPreview(producto.photo_url); }}
+            >
+              <X size={12} className="inline" /> descartar
+            </button>
+          )}
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </div>
+
+      <Input label="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
+
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label="Precio base ($)"
+          type="number"
+          step="0.01"
+          value={basePrice}
+          onChange={(e) => setBasePrice(e.target.value)}
+        />
+        <Input
+          label="Categoría"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-[var(--muted-foreground)] mb-1 block">Marca</label>
+        <select
+          value={brandId}
+          onChange={(e) => setBrandId(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+        >
+          <option value="">Sin marca</option>
+          {(marcas ?? []).map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="text-xs text-[var(--muted-foreground)] mb-1 block">Descripción</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
+          placeholder="Descripción opcional..."
+        />
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>Cancelar</Button>
+        <Button onClick={handleSave} disabled={saving}>{saving ? "Guardando..." : "Guardar"}</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit Variante Form ───────────────────────────────────────────────────────
 
 function EditVarianteForm({
   variante,
@@ -280,6 +548,8 @@ function EditVarianteForm({
     </div>
   );
 }
+
+// ─── Add Variante Form ────────────────────────────────────────────────────────
 
 function AddVarianteForm({
   basePrice,

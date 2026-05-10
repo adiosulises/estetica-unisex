@@ -1,14 +1,54 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check } from "lucide-react";
+import { Settings, Loader2, Check, AlertTriangle } from "lucide-react";
 import { useConfig, useUpdateConfig } from "@/hooks/use-configuracion";
+import { useQueryClient } from "@tanstack/react-query";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/utils";
 
 export default function ConfiguracionPage() {
   const { data: config, isLoading } = useConfig();
   const update = useUpdateConfig();
+  const qc = useQueryClient();
+
+  // Admin reset state
+  const [confirmReset, setConfirmReset] = useState<"ventas" | "caja" | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [resetDone, setResetDone] = useState<string | null>(null);
+
+  async function handleReset(type: "ventas" | "caja") {
+    setResetting(true);
+    try {
+      const supabase = createClient();
+      if (type === "ventas") {
+        // Respect FK order: brand_payout_items → brand_payouts → sale_items → sales
+        const { error: bpiErr } = await supabase.from("brand_payout_items").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (bpiErr) throw bpiErr;
+        const { error: bpErr } = await supabase.from("brand_payouts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (bpErr) throw bpErr;
+        const { error: siErr } = await supabase.from("sale_items").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (siErr) throw siErr;
+        const { error: sErr } = await supabase.from("sales").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (sErr) throw sErr;
+        setResetDone("Ventas eliminadas correctamente.");
+      } else {
+        // Delete cash_movements and cash_registers
+        const { error: cmErr } = await supabase.from("cash_movements").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (cmErr) throw cmErr;
+        const { error: crErr } = await supabase.from("cash_registers").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+        if (crErr) throw crErr;
+        setResetDone("Datos de caja eliminados correctamente.");
+      }
+      qc.invalidateQueries();
+      setConfirmReset(null);
+    } catch (e) {
+      setResetDone(`Error: ${(e as Error).message}`);
+    }
+    setResetting(false);
+  }
 
   const [rent, setRent] = useState("");
   const [goal, setGoal] = useState("");
@@ -183,6 +223,68 @@ export default function ConfiguracionPage() {
           <><Check size={14} /> Guardado</>
         ) : "Guardar cambios"}
       </Button>
+
+      {/* Admin: Limpiar datos de prueba */}
+      <Section title="Zona de administrador">
+        <p className="text-xs text-[var(--muted-foreground)] -mt-1">
+          Elimina datos de prueba antes de empezar a usar la app en producción.
+          <strong className="text-[var(--foreground)]"> El inventario no se toca.</strong>
+        </p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setConfirmReset("ventas")}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-left"
+          >
+            <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-700">Eliminar todas las ventas</p>
+              <p className="text-xs text-red-500">Borra sales, sale_items y datos de liquidaciones</p>
+            </div>
+          </button>
+          <button
+            onClick={() => setConfirmReset("caja")}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-left"
+          >
+            <AlertTriangle size={16} className="text-red-500 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-700">Limpiar caja registradora</p>
+              <p className="text-xs text-red-500">Borra cash_movements y cash_registers</p>
+            </div>
+          </button>
+        </div>
+        {resetDone && (
+          <p className={`text-xs mt-1 ${resetDone.startsWith("Error") ? "text-[var(--destructive)]" : "text-green-600"}`}>
+            {resetDone}
+          </p>
+        )}
+      </Section>
+
+      {/* Confirm reset modal */}
+      <Modal
+        open={!!confirmReset}
+        onClose={() => setConfirmReset(null)}
+        title="¿Confirmar eliminación?"
+        size="sm"
+      >
+        <div className="p-6 flex flex-col gap-4">
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-red-50 border border-red-200">
+            <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">
+              {confirmReset === "ventas"
+                ? "Se eliminarán TODAS las ventas, artículos vendidos y liquidaciones de marcas. Esta acción es irreversible."
+                : "Se eliminarán TODOS los registros de caja (aperturas, cierres y movimientos). Esta acción es irreversible."}
+            </p>
+          </div>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Escribe <span className="font-mono font-bold text-[var(--foreground)]">CONFIRMAR</span> para continuar.
+          </p>
+          <ConfirmInput
+            onConfirm={() => confirmReset && handleReset(confirmReset)}
+            onCancel={() => setConfirmReset(null)}
+            loading={resetting}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -235,6 +337,39 @@ function PctField({ label, value, onChange }: {
           className="w-full pl-3 pr-7 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm text-right focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--muted-foreground)]">%</span>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmInput({
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const [val, setVal] = useState("");
+  return (
+    <div className="flex flex-col gap-3">
+      <input
+        type="text"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="CONFIRMAR"
+        className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-400"
+      />
+      <div className="flex justify-end gap-3">
+        <Button variant="secondary" onClick={onCancel} disabled={loading}>Cancelar</Button>
+        <Button
+          onClick={onConfirm}
+          disabled={val !== "CONFIRMAR" || loading}
+          className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-40"
+        >
+          {loading ? <><Loader2 size={14} className="animate-spin" /> Eliminando...</> : "Eliminar definitivamente"}
+        </Button>
       </div>
     </div>
   );
