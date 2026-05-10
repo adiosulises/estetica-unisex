@@ -14,8 +14,7 @@ export const productoSchema = z.object({
   sku_prefix: z
     .string()
     .min(1, "El prefijo es requerido")
-    .max(6, "Máximo 6 caracteres")
-    .regex(/^[a-zA-Z0-9]+$/),
+    .max(6, "Máximo 6 caracteres"),
   category: z.string().min(1, "La categoría es requerida").max(80),
   base_price: z.number({ error: "Precio inválido" }).positive("El precio debe ser mayor a 0"),
   description: z.string().max(500).optional().or(z.literal("")),

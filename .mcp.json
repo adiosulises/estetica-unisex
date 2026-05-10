@@ -4,10 +4,7 @@
       "type": "stdio",
       "command": "npx",
       "args": [
-        "-y",
-        "@supabase/mcp-server-supabase",
-        "--access-token",
-        "sbp_9543e8caab4697664d652dc7758ba2e7bb7bd9ff"
+      
       ],
       "env": {}
     }

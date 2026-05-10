@@ -5,7 +5,6 @@ export const marcaSchema = z.object({
   sku_prefix: z
     .string()
     .max(6, "Máximo 6 caracteres")
-    .regex(/^[a-zA-Z0-9]+$/)
     .optional()
     .or(z.literal("")),
   contact_name: z.string().max(100).optional().or(z.literal("")),
