@@ -56,6 +56,7 @@ export function EditarEmpleadoForm({ empleado, onSubmit, onCancel }: Props) {
         >
           <option value="employee">Empleado</option>
           <option value="admin">Admin</option>
+          <option value="god">God</option>
         </Select>
 
         <Input

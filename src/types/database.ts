@@ -1011,6 +1011,87 @@ export type Database = {
           },
         ]
       }
+      category_balance_logs: {
+        Row: {
+          id: string
+          category: string
+          old_balance: number
+          new_balance: number
+          set_by_name: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          category: string
+          old_balance: number
+          new_balance: number
+          set_by_name: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          category?: string
+          old_balance?: number
+          new_balance?: number
+          set_by_name?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      category_balances: {
+        Row: {
+          category: string
+          balance: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          balance?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          balance?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      spending_transactions: {
+        Row: {
+          id: string
+          category: string
+          amount: number
+          concept: string
+          performed_by: string
+          transaction_date: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          category: string
+          amount: number
+          concept: string
+          performed_by: string
+          transaction_date?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          category?: string
+          amount?: number
+          concept?: string
+          performed_by?: string
+          transaction_date?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       cash_balance: {
@@ -1030,6 +1111,26 @@ export type Database = {
           p_paid_transfer?: number
         }
         Returns: Json
+      }
+      create_spending_transaction: {
+        Args: {
+          p_category: string
+          p_amount: number
+          p_concept: string
+          p_performed_by: string
+          p_transaction_date: string
+          p_notes?: string
+        }
+        Returns: string
+      }
+      set_category_balance: {
+        Args: {
+          p_category: string
+          p_new_balance: number
+          p_set_by_name: string
+          p_notes?: string
+        }
+        Returns: undefined
       }
       my_role: { Args: never; Returns: string }
     }

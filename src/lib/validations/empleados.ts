@@ -5,14 +5,14 @@ export const crearEmpleadoSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(8, "Mínimo 8 caracteres"),
   phone: z.string().max(20).optional().or(z.literal("")),
-  role: z.enum(["admin", "employee"]),
+  role: z.enum(["god", "admin", "employee"]),
   salary_pct: z.number().min(0).max(1),
 });
 
 export const editarEmpleadoSchema = z.object({
   full_name: z.string().min(1, "El nombre es requerido").max(100),
   phone: z.string().max(20).optional().or(z.literal("")),
-  role: z.enum(["admin", "employee"]),
+  role: z.enum(["god", "admin", "employee"]),
   salary_pct: z.number().min(0).max(1),
 });
 

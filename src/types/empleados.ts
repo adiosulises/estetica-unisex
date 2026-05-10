@@ -1,4 +1,4 @@
-export type EmpleadoRol = "admin" | "employee";
+export type EmpleadoRol = "god" | "admin" | "employee";
 
 export interface Empleado {
   id: string;
