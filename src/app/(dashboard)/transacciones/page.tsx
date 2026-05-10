@@ -24,6 +24,7 @@ import {
   type CategoryKey,
   type CombinedTransaction,
 } from "@/hooks/use-transacciones";
+import { useMonthIvaCollected } from "@/hooks/use-store-liquidacion";
 import { useMyRole } from "@/hooks/use-my-role";
 import { useEmpleados } from "@/hooks/use-empleados";
 import { Modal } from "@/components/ui/modal";
@@ -72,6 +73,7 @@ export default function TransaccionesPage() {
     month,
     category: filterCat === "all" ? undefined : filterCat,
   });
+  const { data: ivaCollected = 0 } = useMonthIvaCollected(month);
 
   const balanceMap = Object.fromEntries(balances.map((b) => [b.category, b.balance]));
 
@@ -139,6 +141,22 @@ export default function TransaccionesPage() {
             </div>
           );
         })}
+      </div>
+
+      {/* ── IVA acumulado del mes ──────────────────────── */}
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#ef444420" }}>
+            <span className="text-xs font-bold" style={{ color: "#ef4444" }}>IVA</span>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-[var(--foreground)]">IVA recaudado este mes</p>
+            <p className="text-xs text-[var(--muted-foreground)]">Acumulado de ventas con tarjeta (y/o transferencia si aplica)</p>
+          </div>
+        </div>
+        <p className="text-lg font-bold font-mono tabular-nums" style={{ color: "#ef4444" }}>
+          {formatCurrency(ivaCollected)}
+        </p>
       </div>
 
       {/* ── Filter tabs ───────────────────────────────── */}

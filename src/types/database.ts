@@ -651,6 +651,7 @@ export type Database = {
           card_rate: number
           construction_pct: number
           id: string
+          iva_includes_transfer: boolean
           iva_rate: number
           maintenance_pct: number
           monthly_goal: number
@@ -665,6 +666,7 @@ export type Database = {
           card_rate?: number
           construction_pct?: number
           id?: string
+          iva_includes_transfer?: boolean
           iva_rate?: number
           maintenance_pct?: number
           monthly_goal?: number
@@ -679,6 +681,7 @@ export type Database = {
           card_rate?: number
           construction_pct?: number
           id?: string
+          iva_includes_transfer?: boolean
           iva_rate?: number
           maintenance_pct?: number
           monthly_goal?: number
@@ -959,6 +962,7 @@ export type Database = {
           employee_id: string | null
           folio: string | null
           id: string
+          iva_collected: number
           notes: string | null
           paid_card: number
           paid_cash: number
@@ -975,6 +979,7 @@ export type Database = {
           employee_id?: string | null
           folio?: string | null
           id?: string
+          iva_collected?: number
           notes?: string | null
           paid_card?: number
           paid_cash?: number
@@ -991,6 +996,7 @@ export type Database = {
           employee_id?: string | null
           folio?: string | null
           id?: string
+          iva_collected?: number
           notes?: string | null
           paid_card?: number
           paid_cash?: number

@@ -10,7 +10,6 @@ import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 
 const CARD_COMMISSION = 0.046; // MercadoPago 4.6%
-const IVA_FACTOR = 16 / 116;  // IVA incluido en precio
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SaleRow {
@@ -20,6 +19,7 @@ interface SaleRow {
   paid_cash: number;
   paid_card: number;
   paid_transfer: number;
+  iva_collected: number;
   payment_method: string;
   status: string;
   notes: string | null;
@@ -49,7 +49,7 @@ function useSales(search: string, dateFrom: string, dateTo: string) {
       let q = supabase
         .from("sales")
         .select(
-          "id, folio, total, paid_cash, paid_card, paid_transfer, payment_method, status, notes, created_at, sale_items(count), employee:employees(full_name)"
+          "id, folio, total, paid_cash, paid_card, paid_transfer, iva_collected, payment_method, status, notes, created_at, sale_items(count), employee:employees(full_name)"
         )
         .order("created_at", { ascending: false })
         .limit(100);
@@ -63,6 +63,7 @@ function useSales(search: string, dateFrom: string, dateTo: string) {
 
       return (data ?? []).map((s: any) => ({
         ...s,
+        iva_collected: Number(s.iva_collected ?? 0),
         item_count: s.sale_items?.[0]?.count ?? 0,
         employee_name: s.employee?.full_name ?? null,
       }));
@@ -212,7 +213,7 @@ function SaleCard({
     <Banknote size={13} />;
 
   // Financial calculations (sale-level)
-  const iva        = sale.total * IVA_FACTOR;
+  const iva        = sale.iva_collected;
   const commission = sale.paid_card * CARD_COMMISSION;
 
   // Items aggregations (available when expanded)
@@ -288,7 +289,7 @@ function SaleCard({
           {/* Financial breakdown */}
           <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex flex-col gap-1.5 text-xs">
             <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-1">Desglose financiero</p>
-            <FinRow label="IVA incluido (16%)" value={iva} muted />
+            {iva > 0 && <FinRow label="IVA incluido (16%)" value={iva} muted />}
             {commission > 0 && (
               <FinRow label="Comisión MercadoPago (4.6%)" value={-commission} negative />
             )}

@@ -177,8 +177,10 @@ function TiendaTab({ month }: { month: string }) {
 
   // Summary bar
   const gross    = summary?.gross_sales ?? 0;
-  const iva      = summary ? gross * (16 / 116) : 0;
-  const cc       = summary ? summary.paid_card * 0.046 : 0;
+  // IVA shown in summary always uses card-only (the full rule lives in the hook / config)
+  const ivaBase  = summary?.paid_card ?? 0;
+  const iva      = ivaBase * (16 / 116);
+  const cc       = (summary?.paid_card ?? 0) * 0.046;
   const storeNet = summary?.store_net ?? 0;
 
   async function handleGenerate() {

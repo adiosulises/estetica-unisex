@@ -59,6 +59,7 @@ export default function ConfiguracionPage() {
   const [construction, setConstruction] = useState("");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ivaIncludesTransfer, setIvaIncludesTransfer] = useState(false);
 
   useEffect(() => {
     if (!config) return;
@@ -69,6 +70,7 @@ export default function ConfiguracionPage() {
     setSavings(String(Math.round(config.savings_pct * 100)));
     setAds(String(Math.round(config.ads_pct * 100)));
     setConstruction(String(Math.round(config.construction_pct * 100)));
+    setIvaIncludesTransfer(config.iva_includes_transfer ?? false);
   }, [config]);
 
   const totalPct = [salary, maintenance, savings, ads, construction]
@@ -79,13 +81,14 @@ export default function ConfiguracionPage() {
     if (totalPct > 100) { setError("Los porcentajes suman más de 100%"); return; }
     try {
       await update.mutateAsync({
-        rent_amount:       parseFloat(rent) || 0,
-        monthly_goal:      parseFloat(goal) || 0,
-        salary_pool_pct:   (parseFloat(salary) || 0) / 100,
-        maintenance_pct:   (parseFloat(maintenance) || 0) / 100,
-        savings_pct:       (parseFloat(savings) || 0) / 100,
-        ads_pct:           (parseFloat(ads) || 0) / 100,
-        construction_pct:  (parseFloat(construction) || 0) / 100,
+        rent_amount:           parseFloat(rent) || 0,
+        monthly_goal:          parseFloat(goal) || 0,
+        salary_pool_pct:       (parseFloat(salary) || 0) / 100,
+        maintenance_pct:       (parseFloat(maintenance) || 0) / 100,
+        savings_pct:           (parseFloat(savings) || 0) / 100,
+        ads_pct:               (parseFloat(ads) || 0) / 100,
+        construction_pct:      (parseFloat(construction) || 0) / 100,
+        iva_includes_transfer: ivaIncludesTransfer,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -137,6 +140,21 @@ export default function ConfiguracionPage() {
           prefix="$"
           hint={`Equivale a ${formatCurrency(dailyTarget)} por día`}
         />
+        {/* IVA scope */}
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={ivaIncludesTransfer}
+            onChange={(e) => setIvaIncludesTransfer(e.target.checked)}
+            className="mt-0.5 w-4 h-4 accent-[var(--primary)] cursor-pointer"
+          />
+          <div>
+            <p className="text-sm text-[var(--foreground)]">Incluir transferencias en el cálculo del IVA</p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              Por defecto solo se calcula IVA sobre ventas con tarjeta. Activa esto si también declaras IVA de transferencias.
+            </p>
+          </div>
+        </label>
       </Section>
 
       {/* Distribution percentages */}

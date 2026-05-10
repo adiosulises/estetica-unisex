@@ -9,6 +9,7 @@ export interface Config {
   monthly_goal: number;
   iva_rate: number;
   card_rate: number;
+  iva_includes_transfer: boolean;
   salary_pool_pct: number;
   maintenance_pct: number;
   savings_pct: number;

@@ -97,6 +97,8 @@ export function useStoreLiquidacion(month: string) {
 export interface MonthSalesSummary {
   gross_sales: number;
   paid_card: number;
+  paid_transfer: number;
+  iva_collected: number; // sum(sales.iva_collected) — pre-calculated per sale
   store_net: number;    // sum(sale_items.store_amount)
   brand_total: number;  // sum(sale_items.brand_amount)
 }
@@ -105,24 +107,26 @@ export function useMonthSalesSummary(month: string) {
   return useQuery({
     queryKey: ["month-sales-summary", month],
     queryFn: async (): Promise<MonthSalesSummary> => {
-      if (!month) return { gross_sales: 0, paid_card: 0, store_net: 0, brand_total: 0 };
+      if (!month) return { gross_sales: 0, paid_card: 0, paid_transfer: 0, iva_collected: 0, store_net: 0, brand_total: 0 };
       const supabase = createClient();
 
       const [y, m] = month.split("-").map(Number);
       const start = new Date(y, m - 1, 1).toLocaleDateString("en-CA", { timeZone: TZ });
       const end   = new Date(y, m, 0).toLocaleDateString("en-CA", { timeZone: TZ });
 
-      // Sales totals
+      // Sales totals (including iva_collected stored per sale)
       const { data: salesData, error: sErr } = await supabase
         .from("sales")
-        .select("total, paid_card")
+        .select("total, paid_card, paid_transfer, iva_collected")
         .eq("status", "completed")
         .gte("created_at", `${start}T00:00:00-07:00`)
         .lte("created_at", `${end}T23:59:59-07:00`);
       if (sErr) throw sErr;
 
-      const gross_sales = (salesData ?? []).reduce((s, r) => s + Number(r.total), 0);
-      const paid_card   = (salesData ?? []).reduce((s, r) => s + Number(r.paid_card), 0);
+      const gross_sales    = (salesData ?? []).reduce((s, r) => s + Number(r.total), 0);
+      const paid_card      = (salesData ?? []).reduce((s, r) => s + Number(r.paid_card), 0);
+      const paid_transfer  = (salesData ?? []).reduce((s, r) => s + Number(r.paid_transfer), 0);
+      const iva_collected  = (salesData ?? []).reduce((s, r) => s + Number(r.iva_collected ?? 0), 0);
 
       // Sale items: store vs brand amounts
       const { data: salesIds, error: idsErr } = await supabase
@@ -134,7 +138,7 @@ export function useMonthSalesSummary(month: string) {
       if (idsErr) throw idsErr;
 
       const ids = (salesIds ?? []).map((s) => s.id);
-      if (ids.length === 0) return { gross_sales: 0, paid_card: 0, store_net: 0, brand_total: 0 };
+      if (ids.length === 0) return { gross_sales: 0, paid_card: 0, paid_transfer: 0, iva_collected: 0, store_net: 0, brand_total: 0 };
 
       const { data: itemsData, error: iErr } = await supabase
         .from("sale_items")
@@ -145,7 +149,7 @@ export function useMonthSalesSummary(month: string) {
       const store_net   = (itemsData ?? []).reduce((s, r) => s + Number(r.store_amount ?? 0), 0);
       const brand_total = (itemsData ?? []).reduce((s, r) => s + Number(r.brand_amount ?? 0), 0);
 
-      return { gross_sales, paid_card, store_net, brand_total };
+      return { gross_sales, paid_card, paid_transfer, iva_collected, store_net, brand_total };
     },
     staleTime: 60_000,
     enabled: !!month,
@@ -171,10 +175,10 @@ export function useGenerateStoreLiquidacion() {
 
       const supabase = createClient();
 
-      const IVA_FACTOR       = 16 / 116;
       const CARD_RATE        = config.card_rate ?? 0.046;
 
-      const iva_amount      = summary.gross_sales * IVA_FACTOR;
+      // IVA: use the pre-accumulated value stored per sale in the DB
+      const iva_amount      = summary.iva_collected;
       const card_commission = summary.paid_card * CARD_RATE;
       const store_net       = summary.store_net;
       const brand_total     = summary.brand_total;
@@ -299,6 +303,33 @@ export function useGenerateStoreLiquidacion() {
     onSuccess: (_, { month }) => {
       qc.invalidateQueries({ queryKey: ["store-liquidacion", month] });
     },
+  });
+}
+
+// ─── Query: IVA accumulated for a month ──────────────────────────────────────
+
+export function useMonthIvaCollected(month: string) {
+  return useQuery({
+    queryKey: ["month-iva-collected", month],
+    queryFn: async (): Promise<number> => {
+      if (!month) return 0;
+      const supabase = createClient();
+      const [y, m] = month.split("-").map(Number);
+      const start = new Date(y, m - 1, 1).toLocaleDateString("en-CA", { timeZone: TZ });
+      const end   = new Date(y, m, 0).toLocaleDateString("en-CA", { timeZone: TZ });
+
+      const { data, error } = await supabase
+        .from("sales")
+        .select("iva_collected")
+        .eq("status", "completed")
+        .gte("created_at", `${start}T00:00:00-07:00`)
+        .lte("created_at", `${end}T23:59:59-07:00`);
+      if (error) throw error;
+
+      return (data ?? []).reduce((s, r) => s + Number(r.iva_collected ?? 0), 0);
+    },
+    staleTime: 60_000,
+    enabled: !!month,
   });
 }
 
