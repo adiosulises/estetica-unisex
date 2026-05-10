@@ -1059,6 +1059,96 @@ export type Database = {
         }
         Relationships: []
       }
+      store_liquidation_items: {
+        Row: {
+          id: string
+          liquidation_id: string
+          category: string
+          employee_id: string | null
+          employee_name: string | null
+          allocated_amount: number
+          payment_method: string | null
+          status: string
+          paid_at: string | null
+          notes: string | null
+          sort_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          liquidation_id: string
+          category: string
+          employee_id?: string | null
+          employee_name?: string | null
+          allocated_amount: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          sort_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          liquidation_id?: string
+          category?: string
+          employee_id?: string | null
+          employee_name?: string | null
+          allocated_amount?: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          sort_order?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      store_liquidations: {
+        Row: {
+          id: string
+          period_month: string
+          gross_sales: number
+          iva_amount: number
+          card_commission: number
+          brand_total: number
+          store_net: number
+          rent_deducted: number
+          distributable: number
+          status: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          period_month: string
+          gross_sales?: number
+          iva_amount?: number
+          card_commission?: number
+          brand_total?: number
+          store_net?: number
+          rent_deducted?: number
+          distributable?: number
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          period_month?: string
+          gross_sales?: number
+          iva_amount?: number
+          card_commission?: number
+          brand_total?: number
+          store_net?: number
+          rent_deducted?: number
+          distributable?: number
+          status?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       spending_transactions: {
         Row: {
           id: string
@@ -1111,6 +1201,14 @@ export type Database = {
           p_paid_transfer?: number
         }
         Returns: Json
+      }
+      mark_liquidation_item_paid: {
+        Args: {
+          p_item_id: string
+          p_payment_method: string
+          p_notes?: string
+        }
+        Returns: undefined
       }
       create_spending_transaction: {
         Args: {

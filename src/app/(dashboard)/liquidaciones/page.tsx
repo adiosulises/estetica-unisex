@@ -3,21 +3,58 @@
 import { useState } from "react";
 import {
   Banknote, CreditCard, ArrowLeftRight, ChevronDown, ChevronUp,
-  CheckCircle2, Clock, Loader2, History,
+  CheckCircle2, Loader2, History, RefreshCw, Store,
+  Users, Receipt,
 } from "lucide-react";
 import {
   usePendingByBrand, usePendingItems, useBrandPayouts, useCreatePayout,
   type BrandPending, type PendingItem,
 } from "@/hooks/use-liquidaciones";
+import {
+  useStoreLiquidacion, useMonthSalesSummary, useGenerateStoreLiquidacion,
+  useMarkItemPaid, LIQ_CATEGORY_LABELS, LIQ_CATEGORY_COLORS,
+  type StoreLiquidacionItem,
+} from "@/hooks/use-store-liquidacion";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/utils";
 
-export default function LiquidacionesPage() {
-  const { data: brands = [], isLoading } = usePendingByBrand();
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [showHistory, setShowHistory] = useState<string | null>(null);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-  const totalPending = brands.reduce((s, b) => s + b.pending_amount, 0);
+function currentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function prevMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function nextMonth(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonth(ym: string) {
+  const [y, m] = ym.split("-");
+  return new Date(Number(y), Number(m) - 1, 1)
+    .toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+}
+
+const PAYMENT_METHODS = [
+  { value: "cash",     label: "Efectivo",      icon: Banknote },
+  { value: "transfer", label: "Transferencia", icon: ArrowLeftRight },
+  { value: "card",     label: "Tarjeta",       icon: CreditCard },
+];
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function LiquidacionesPage() {
+  const [tab, setTab] = useState<"marcas" | "tienda">("marcas");
+  const [month, setMonth] = useState(currentMonth());
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
@@ -25,19 +62,71 @@ export default function LiquidacionesPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold text-[var(--foreground)]">Liquidaciones</h1>
-          <p className="text-sm text-[var(--muted-foreground)]">
-            {brands.length} {brands.length === 1 ? "marca" : "marcas"} con saldo pendiente
+          <p className="text-sm text-[var(--muted-foreground)] capitalize">{formatMonth(month)}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setMonth(prevMonth(month))}
+            className="px-2 py-1.5 text-xs rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] transition-colors"
+          >‹</button>
+          <button
+            onClick={() => setMonth(nextMonth(month))}
+            disabled={month >= currentMonth()}
+            className="px-2 py-1.5 text-xs rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] transition-colors disabled:opacity-40"
+          >›</button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex rounded-xl border border-[var(--border)] overflow-hidden text-sm">
+        <button
+          onClick={() => setTab("marcas")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 font-medium transition-colors ${
+            tab === "marcas"
+              ? "bg-[var(--primary)] text-white"
+              : "bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+          }`}
+        >
+          <Users size={15} /> Marcas
+        </button>
+        <button
+          onClick={() => setTab("tienda")}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 font-medium transition-colors ${
+            tab === "tienda"
+              ? "bg-[var(--primary)] text-white"
+              : "bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
+          }`}
+        >
+          <Store size={15} /> Tienda
+        </button>
+      </div>
+
+      {tab === "marcas" && <MarcasTab />}
+      {tab === "tienda" && <TiendaTab month={month} />}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: MARCAS (existing logic, unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MarcasTab() {
+  const { data: brands = [], isLoading } = usePendingByBrand();
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState<string | null>(null);
+  const totalPending = brands.reduce((s, b) => s + b.pending_amount, 0);
+
+  return (
+    <>
+      {totalPending > 0 && (
+        <div className="text-right -mt-2">
+          <p className="text-xs text-[var(--muted-foreground)]">Total pendiente</p>
+          <p className="text-lg font-bold font-mono text-[var(--foreground)]">
+            {formatCurrency(totalPending)}
           </p>
         </div>
-        {totalPending > 0 && (
-          <div className="text-right">
-            <p className="text-xs text-[var(--muted-foreground)]">Total pendiente</p>
-            <p className="text-lg font-bold font-mono text-[var(--foreground)]">
-              {formatCurrency(totalPending)}
-            </p>
-          </div>
-        )}
-      </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-12">
@@ -62,11 +151,355 @@ export default function LiquidacionesPage() {
           ))}
         </div>
       )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB: TIENDA — Monthly store settlement
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TiendaTab({ month }: { month: string }) {
+  const { data: liq, isLoading: liqLoading } = useStoreLiquidacion(month);
+  const { data: summary, isLoading: sumLoading } = useMonthSalesSummary(month);
+  const generate = useGenerateStoreLiquidacion();
+  const [payingItem, setPayingItem] = useState<StoreLiquidacionItem | null>(null);
+
+  const isLoading = liqLoading || sumLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 size={24} className="animate-spin text-[var(--muted-foreground)]" />
+      </div>
+    );
+  }
+
+  // Summary bar
+  const gross    = summary?.gross_sales ?? 0;
+  const iva      = summary ? gross * (16 / 116) : 0;
+  const cc       = summary ? summary.paid_card * 0.046 : 0;
+  const storeNet = summary?.store_net ?? 0;
+
+  async function handleGenerate() {
+    if (!summary) return;
+    await generate.mutateAsync({ month, summary });
+  }
+
+  return (
+    <>
+      {/* Summary stats */}
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 flex flex-col gap-2 text-sm">
+        <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
+          Resumen del mes
+        </p>
+        <StatRow label="Ventas brutas"       value={gross}     />
+        <StatRow label="IVA a pagar (SAT)"   value={-iva}      color="red" />
+        <StatRow label="Comisión tarjeta"     value={-cc}       color="red" muted />
+        <StatRow label="Pago a marcas"        value={-(summary?.brand_total ?? 0)} color="red" muted />
+        <div className="border-t border-[var(--border)] my-1" />
+        <StatRow label="Ingreso neto tienda"  value={storeNet}  bold />
+        {liq && (
+          <>
+            <StatRow label="Renta"            value={-liq.rent_deducted} color="red" muted />
+            <StatRow label="Repartible"       value={liq.distributable}  bold color="green" />
+          </>
+        )}
+      </div>
+
+      {/* Generate / refresh button */}
+      {!liq ? (
+        <div className="flex flex-col items-center gap-3 py-6">
+          <Receipt size={36} className="text-[var(--muted-foreground)] opacity-30" />
+          <p className="text-sm text-[var(--muted-foreground)] text-center">
+            No hay liquidación generada para este mes.
+          </p>
+          <Button
+            onClick={handleGenerate}
+            disabled={generate.isPending || gross === 0}
+          >
+            {generate.isPending
+              ? <><Loader2 size={14} className="animate-spin" /> Generando...</>
+              : "Generar liquidación"}
+          </Button>
+          {gross === 0 && (
+            <p className="text-xs text-[var(--muted-foreground)]">No hay ventas en este mes.</p>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Refresh button */}
+          <div className="flex justify-between items-center -mb-2">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {liq.items.filter((i) => i.status === "paid").length} de {liq.items.length} pagados
+            </p>
+            <button
+              onClick={handleGenerate}
+              disabled={generate.isPending}
+              className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+            >
+              <RefreshCw size={12} className={generate.isPending ? "animate-spin" : ""} />
+              Recalcular
+            </button>
+          </div>
+
+          {/* Items table */}
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            {groupItems(liq.items).map((group, gi) => (
+              <div key={group.category} className={gi > 0 ? "border-t border-[var(--border)]" : ""}>
+                {/* Group header */}
+                <div
+                  className="flex items-center justify-between px-4 py-2.5 bg-[var(--muted)]/50"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full"
+                      style={{ backgroundColor: LIQ_CATEGORY_COLORS[group.category] ?? "#888" }}
+                    />
+                    <span className="text-sm font-semibold text-[var(--foreground)]">
+                      {LIQ_CATEGORY_LABELS[group.category] ?? group.category}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-sm font-bold text-[var(--foreground)]">
+                      {formatCurrency(group.total)}
+                    </span>
+                    {group.allPaid ? (
+                      <span className="text-xs text-green-600 flex items-center gap-1">
+                        <CheckCircle2 size={13} /> Pagado
+                      </span>
+                    ) : (
+                      <span className="text-xs text-amber-600">Pendiente</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sub-items (salary per employee) */}
+                {group.items.map((item, ii) => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center justify-between px-4 py-3 ${
+                      ii < group.items.length - 1 ? "border-b border-[var(--border)]" : ""
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <p className="text-sm text-[var(--foreground)]">
+                        {item.employee_name
+                          ? item.employee_name
+                          : LIQ_CATEGORY_LABELS[item.category] ?? item.category}
+                      </p>
+                      {item.paid_at && (
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          Pagado{" "}
+                          {new Date(item.paid_at).toLocaleDateString("es-MX", {
+                            dateStyle: "short",
+                          })}
+                          {item.payment_method ? ` · ${pmLabel(item.payment_method)}` : ""}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-sm text-[var(--foreground)]">
+                        {formatCurrency(item.allocated_amount)}
+                      </span>
+                      {item.status === "paid" ? (
+                        <CheckCircle2 size={16} className="text-green-500" />
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setPayingItem(item)}
+                        >
+                          Pagar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Pay modal */}
+      <Modal
+        open={!!payingItem}
+        onClose={() => setPayingItem(null)}
+        title="Registrar pago"
+        size="sm"
+      >
+        {payingItem && (
+          <PayItemForm
+            item={payingItem}
+            onClose={() => setPayingItem(null)}
+          />
+        )}
+      </Modal>
+    </>
+  );
+}
+
+// ─── Group items by category (keeping salary items together) ──────────────────
+
+interface ItemGroup {
+  category: string;
+  total: number;
+  allPaid: boolean;
+  items: StoreLiquidacionItem[];
+}
+
+function groupItems(items: StoreLiquidacionItem[]): ItemGroup[] {
+  const ORDER = ["iva", "rent", "salary", "maintenance", "savings", "ads", "construction"];
+  const map = new Map<string, StoreLiquidacionItem[]>();
+
+  for (const item of items) {
+    const list = map.get(item.category) ?? [];
+    list.push(item);
+    map.set(item.category, list);
+  }
+
+  return ORDER.filter((cat) => map.has(cat)).map((cat) => {
+    const catItems = map.get(cat)!;
+    return {
+      category: cat,
+      total: catItems.reduce((s, i) => s + i.allocated_amount, 0),
+      allPaid: catItems.every((i) => i.status === "paid"),
+      items: catItems,
+    };
+  });
+}
+
+function pmLabel(pm: string) {
+  return pm === "cash" ? "Efectivo" : pm === "transfer" ? "Transferencia" : "Tarjeta";
+}
+
+// ─── Pay item form ────────────────────────────────────────────────────────────
+
+function PayItemForm({
+  item,
+  onClose,
+}: {
+  item: StoreLiquidacionItem;
+  onClose: () => void;
+}) {
+  const [method, setMethod] = useState("transfer");
+  const [notes, setNotes]   = useState("");
+  const [err, setErr]       = useState<string | null>(null);
+  const markPaid = useMarkItemPaid();
+
+  const label = item.employee_name
+    ? item.employee_name
+    : LIQ_CATEGORY_LABELS[item.category] ?? item.category;
+
+  async function handlePay() {
+    setErr(null);
+    try {
+      await markPaid.mutateAsync({ itemId: item.id, paymentMethod: method, notes: notes || undefined });
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="p-6 flex flex-col gap-4">
+      {/* Summary */}
+      <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex justify-between items-center">
+        <div>
+          <p className="text-xs text-[var(--muted-foreground)]">
+            {LIQ_CATEGORY_LABELS[item.category] ?? item.category}
+          </p>
+          <p className="text-sm font-semibold text-[var(--foreground)]">{label}</p>
+        </div>
+        <p className="text-lg font-bold font-mono text-[var(--foreground)]">
+          {formatCurrency(item.allocated_amount)}
+        </p>
+      </div>
+
+      {/* Payment method */}
+      <div>
+        <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">
+          Medio de pago
+        </p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {PAYMENT_METHODS.map(({ value, label: ml, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setMethod(value)}
+              className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                method === value
+                  ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                  : "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--primary)]"
+              }`}
+            >
+              <Icon size={15} />
+              {ml}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <textarea
+        placeholder="Notas (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={2}
+        className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
+      />
+
+      {err && <p className="text-xs text-[var(--destructive)]">{err}</p>}
+
+      <div className="flex gap-2">
+        <button
+          onClick={onClose}
+          className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+        >
+          Cancelar
+        </button>
+        <Button onClick={handlePay} disabled={markPaid.isPending} className="flex-1">
+          {markPaid.isPending
+            ? <><Loader2 size={14} className="animate-spin" /> Pagando...</>
+            : `Pagar ${formatCurrency(item.allocated_amount)}`}
+        </Button>
+      </div>
     </div>
   );
 }
 
-// ─── Brand card ───────────────────────────────────────────────────────────────
+// ─── Stat row helper ──────────────────────────────────────────────────────────
+
+function StatRow({
+  label, value, bold, color, muted,
+}: {
+  label: string;
+  value: number;
+  bold?: boolean;
+  color?: "red" | "green";
+  muted?: boolean;
+}) {
+  const textColor = color === "red"
+    ? "text-red-500"
+    : color === "green"
+    ? "text-green-600"
+    : muted
+    ? "text-[var(--muted-foreground)]"
+    : "text-[var(--foreground)]";
+
+  return (
+    <div className={`flex justify-between items-center text-sm ${textColor}`}>
+      <span>{label}</span>
+      <span className={`font-mono ${bold ? "font-bold" : ""}`}>
+        {value < 0 ? `-${formatCurrency(Math.abs(value))}` : formatCurrency(value)}
+      </span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BRAND CARD (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
+
 function BrandCard({
   brand, isExpanded, showingHistory, onToggle, onToggleHistory,
 }: {
@@ -82,7 +515,6 @@ function BrandCard({
 
   return (
     <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
-      {/* Header row */}
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-[var(--muted)]/30 transition-colors text-left"
@@ -101,11 +533,12 @@ function BrandCard({
             <p className="text-sm font-bold font-mono text-amber-600">{formatCurrency(brand.pending_amount)}</p>
             <p className="text-xs text-[var(--muted-foreground)]">pendiente</p>
           </div>
-          {isExpanded ? <ChevronUp size={16} className="text-[var(--muted-foreground)]" /> : <ChevronDown size={16} className="text-[var(--muted-foreground)]" />}
+          {isExpanded
+            ? <ChevronUp size={16} className="text-[var(--muted-foreground)]" />
+            : <ChevronDown size={16} className="text-[var(--muted-foreground)]" />}
         </div>
       </button>
 
-      {/* Expanded: pending items */}
       {isExpanded && (
         <div className="border-t border-[var(--border)]">
           {isLoading ? (
@@ -114,7 +547,6 @@ function BrandCard({
             </div>
           ) : (
             <>
-              {/* Items table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
@@ -126,9 +558,7 @@ function BrandCard({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {items.map((item) => (
-                      <ItemRow key={item.sale_item_id} item={item} />
-                    ))}
+                    {items.map((item) => <ItemRow key={item.sale_item_id} item={item} />)}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-[var(--border)]">
@@ -140,8 +570,6 @@ function BrandCard({
                   </tfoot>
                 </table>
               </div>
-
-              {/* Actions */}
               <div className="px-5 py-3 flex gap-2 border-t border-[var(--border)]">
                 <button
                   onClick={onToggleHistory}
@@ -151,12 +579,8 @@ function BrandCard({
                   {showingHistory ? "Ocultar historial" : "Ver historial"}
                 </button>
                 <div className="flex-1" />
-                <Button size="sm" onClick={() => setShowPay(true)}>
-                  Registrar pago
-                </Button>
+                <Button size="sm" onClick={() => setShowPay(true)}>Registrar pago</Button>
               </div>
-
-              {/* History */}
               {showingHistory && history.length > 0 && (
                 <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-2">
                   <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
@@ -169,9 +593,9 @@ function BrandCard({
                           {p.period_start} → {p.period_end}
                         </p>
                         <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1">
-                          {p.payment_method === "cash"     ? <Banknote size={11} />       : null}
-                          {p.payment_method === "card"     ? <CreditCard size={11} />     : null}
-                          {p.payment_method === "transfer" ? <ArrowLeftRight size={11} /> : null}
+                          {p.payment_method === "cash"     && <Banknote size={11} />}
+                          {p.payment_method === "card"     && <CreditCard size={11} />}
+                          {p.payment_method === "transfer" && <ArrowLeftRight size={11} />}
                           {p.payment_method === "cash" ? "Efectivo" : p.payment_method === "card" ? "Tarjeta" : "Transferencia"}
                         </p>
                       </div>
@@ -185,14 +609,8 @@ function BrandCard({
                   ))}
                 </div>
               )}
-
-              {/* Pay modal */}
               {showPay && (
-                <PayModal
-                  brand={brand}
-                  items={items}
-                  onClose={() => setShowPay(false)}
-                />
+                <BrandPayModal brand={brand} items={items} onClose={() => setShowPay(false)} />
               )}
             </>
           )}
@@ -221,36 +639,17 @@ function ItemRow({ item }: { item: PendingItem }) {
   );
 }
 
-// ─── Pay modal ────────────────────────────────────────────────────────────────
-const PAYMENT_METHODS = [
-  { value: "cash",     label: "Efectivo",       icon: Banknote },
-  { value: "transfer", label: "Transferencia",  icon: ArrowLeftRight },
-  { value: "card",     label: "Tarjeta",        icon: CreditCard },
-];
-
-function PayModal({
-  brand, items, onClose,
-}: {
-  brand: BrandPending;
-  items: PendingItem[];
-  onClose: () => void;
-}) {
+function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: PendingItem[]; onClose: () => void }) {
   const [method, setMethod] = useState("cash");
-  const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes]   = useState("");
+  const [error, setError]   = useState<string | null>(null);
   const createPayout = useCreatePayout();
-
   const total = items.reduce((s, i) => s + i.brand_amount, 0);
 
   async function handlePay() {
     setError(null);
     try {
-      await createPayout.mutateAsync({
-        brand_id: brand.brand_id,
-        items,
-        payment_method: method,
-        notes: notes || undefined,
-      });
+      await createPayout.mutateAsync({ brand_id: brand.brand_id, items, payment_method: method, notes: notes || undefined });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -265,8 +664,6 @@ function PayModal({
           <h2 className="text-base font-bold text-[var(--foreground)]">Registrar pago</h2>
           <p className="text-sm text-[var(--muted-foreground)]">{brand.brand_name}</p>
         </div>
-
-        {/* Summary */}
         <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex flex-col gap-1.5 text-sm">
           <div className="flex justify-between text-[var(--muted-foreground)]">
             <span>{items.length} {items.length === 1 ? "artículo" : "artículos"}</span>
@@ -276,51 +673,28 @@ function PayModal({
             <span className="font-mono">{formatCurrency(total)}</span>
           </div>
         </div>
-
-        {/* Method */}
         <div>
-          <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">
-            Método de pago
-          </p>
+          <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Método de pago</p>
           <div className="grid grid-cols-3 gap-1.5">
             {PAYMENT_METHODS.map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setMethod(value)}
+              <button key={value} onClick={() => setMethod(value)}
                 className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${
                   method === value
                     ? "bg-[var(--primary)] text-white border-[var(--primary)]"
                     : "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--primary)]"
-                }`}
-              >
-                <Icon size={15} />
-                {label}
+                }`}>
+                <Icon size={15} />{label}
               </button>
             ))}
           </div>
         </div>
-
-        <textarea
-          placeholder="Notas (opcional)"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
-        />
-
+        <textarea placeholder="Notas (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+          className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none" />
         {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
-
         <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
-          >
-            Cancelar
-          </button>
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancelar</button>
           <Button onClick={handlePay} disabled={createPayout.isPending} className="flex-1">
-            {createPayout.isPending
-              ? <><Loader2 size={14} className="animate-spin" /> Guardando...</>
-              : `Pagar ${formatCurrency(total)}`}
+            {createPayout.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : `Pagar ${formatCurrency(total)}`}
           </Button>
         </div>
       </div>

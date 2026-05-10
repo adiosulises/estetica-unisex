@@ -61,7 +61,7 @@ export default function CajaPage() {
       </div>
 
       {!register && <OpenCajaCard />}
-      {isOpen    && <OpenSummaryCard register={register} sales={sales} />}
+      {isOpen    && <OpenSummaryCard register={register} sales={sales} movements={movements} />}
       {isClosed  && <ClosedSummaryCard register={register} sales={sales} />}
 
       {register && sales && <SalesBreakdown sales={sales} />}
@@ -127,10 +127,11 @@ function OpenCajaCard() {
 
 // ── Caja abierta ──────────────────────────────────────────────────────────────
 function OpenSummaryCard({
-  register, sales,
+  register, sales, movements,
 }: {
   register: NonNullable<ReturnType<typeof useTodayRegister>["data"]>;
   sales: ReturnType<typeof useTodaySales>["data"];
+  movements: ReturnType<typeof useTodayMovements>["data"];
 }) {
   const [showClose, setShowClose] = useState(false);
   const [closingCash, setClosingCash] = useState("");
@@ -139,10 +140,21 @@ function OpenSummaryCard({
   const [error, setError] = useState<string | null>(null);
   const close = useCloseRegister();
 
-  const cashSales    = sales?.cash_sales ?? 0;
-  const cardSalesNet = (sales?.card_sales ?? 0) * CARD_RATE;
-  const expectedCash = register.opening_cash + cashSales;
-  const expectedCard = (register.opening_card ?? 0) + cardSalesNet;
+  const cashSales      = sales?.cash_sales ?? 0;
+  const transferSales  = sales?.transfer_sales ?? 0;
+  const cardSalesNet   = (sales?.card_sales ?? 0) * CARD_RATE;
+
+  // Non-sale movements affect expected balances (e.g. brand payments, liquidación salaries)
+  const nonSaleMov     = (movements ?? []).filter((m) => m.type !== "sale");
+  const cashMovAdj     = nonSaleMov
+    .filter((m) => m.payment_method === "cash")
+    .reduce((s, m) => s + m.amount, 0);
+  const cardMovAdj     = nonSaleMov
+    .filter((m) => m.payment_method === "card" || m.payment_method === "transfer" || m.payment_method === "mixed")
+    .reduce((s, m) => s + m.amount, 0);
+
+  const expectedCash   = register.opening_cash + cashSales + cashMovAdj;
+  const expectedCard   = (register.opening_card ?? 0) + cardSalesNet + transferSales + cardMovAdj;
 
   const cashDiff = parseFloat(closingCash) - expectedCash;
   const cardDiff = parseFloat(closingCard) - expectedCard;
@@ -181,8 +193,8 @@ function OpenSummaryCard({
         <div className="grid grid-cols-2 gap-3">
           <MiniStat label="Efectivo inicial"    value={formatCurrency(register.opening_cash)} />
           <MiniStat label="Efectivo esperado"   value={formatCurrency(expectedCash)} highlight />
-          <MiniStat label="Terminal inicial"    value={formatCurrency(register.opening_card ?? 0)} />
-          <MiniStat label="Terminal esperada"   value={formatCurrency(expectedCard)} highlight />
+          <MiniStat label="Terminal inicial"          value={formatCurrency(register.opening_card ?? 0)} />
+          <MiniStat label="Terminal + transferencias" value={formatCurrency(expectedCard)} highlight />
         </div>
 
         <button
@@ -203,7 +215,7 @@ function OpenSummaryCard({
             {hasCash && (
               <DiffRow label="Diferencia efectivo" diff={cashDiff} />
             )}
-            <AmountField label="Saldo terminal" icon={<CreditCard size={14} />} value={closingCard} onChange={setClosingCard} />
+            <AmountField label="Saldo terminal + transferencias" icon={<CreditCard size={14} />} value={closingCard} onChange={setClosingCard} />
             {hasCard && (
               <DiffRow label="Diferencia terminal" diff={cardDiff} />
             )}
