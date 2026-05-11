@@ -17,11 +17,124 @@ export interface StoreLiquidacion {
   card_commission: number;
   brand_total: number;
   store_net: number;
+  floor_income: number;
   rent_deducted: number;
   distributable: number;
   status: string;
   notes: string | null;
   created_at: string;
+}
+
+// ─── Floor rents ──────────────────────────────────────────────────────────────
+
+export interface BrandFloorRent {
+  id: string;
+  brand_id: string;
+  brand_name: string;
+  period_month: string;
+  amount: number;
+  payment_method: string | null;
+  status: "pending" | "paid";
+  paid_at: string | null;
+  notes: string | null;
+}
+
+export function useFloorRentsForMonth(month: string) {
+  return useQuery({
+    queryKey: ["floor-rents", month],
+    queryFn: async (): Promise<BrandFloorRent[]> => {
+      if (!month) return [];
+      const supabase = createClient();
+
+      // Get all floor-type brands
+      const { data: floorBrands, error: bErr } = await supabase
+        .from("brands")
+        .select("id, name, contract_value")
+        .eq("contract_type", "floor")
+        .eq("is_active", true)
+        .is("deleted_at", null);
+      if (bErr) throw bErr;
+      if (!floorBrands?.length) return [];
+
+      // Get existing rent records for this month
+      const { data: rents, error: rErr } = await supabase
+        .from("brand_floor_rents")
+        .select("*")
+        .eq("period_month", month);
+      if (rErr) throw rErr;
+
+      const rentMap = new Map((rents ?? []).map((r) => [r.brand_id, r]));
+
+      // Merge: one row per floor brand, using DB record if exists else default amount
+      return floorBrands.map((b) => {
+        const existing = rentMap.get(b.id);
+        return {
+          id: existing?.id ?? "",
+          brand_id: b.id,
+          brand_name: b.name,
+          period_month: month,
+          amount: existing ? Number(existing.amount) : Number(b.contract_value ?? 0),
+          payment_method: existing?.payment_method ?? null,
+          status: (existing?.status ?? "pending") as "pending" | "paid",
+          paid_at: existing?.paid_at ?? null,
+          notes: existing?.notes ?? null,
+        };
+      });
+    },
+    staleTime: 30_000,
+    enabled: !!month,
+  });
+}
+
+export function useUpsertFloorRent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      brand_id, period_month, amount, notes,
+    }: {
+      brand_id: string; period_month: string; amount: number; notes?: string;
+    }) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("brand_floor_rents")
+        .upsert({
+          brand_id,
+          period_month,
+          amount,
+          notes: notes ?? null,
+          status: "pending",
+        }, { onConflict: "brand_id,period_month" });
+      if (error) throw error;
+    },
+    onSuccess: (_, { period_month }) => {
+      qc.invalidateQueries({ queryKey: ["floor-rents", period_month] });
+      qc.invalidateQueries({ queryKey: ["month-sales-summary", period_month] });
+    },
+  });
+}
+
+export function useMarkFloorRentPaid() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      rentId, paymentMethod, notes,
+    }: {
+      rentId: string; paymentMethod: string; notes?: string;
+    }) => {
+      const supabase = createClient();
+      const { error } = await supabase.rpc("mark_floor_rent_paid", {
+        p_rent_id:        rentId,
+        p_payment_method: paymentMethod,
+        p_notes:          notes ?? null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["floor-rents"] });
+      qc.invalidateQueries({ queryKey: ["month-sales-summary"] });
+      qc.invalidateQueries({ queryKey: ["caja-movements-today"] });
+    },
+  });
 }
 
 export interface StoreLiquidacionItem {
@@ -98,16 +211,17 @@ export interface MonthSalesSummary {
   gross_sales: number;
   paid_card: number;
   paid_transfer: number;
-  iva_collected: number; // sum(sales.iva_collected) — pre-calculated per sale
-  store_net: number;    // sum(sale_items.store_amount)
-  brand_total: number;  // sum(sale_items.brand_amount)
+  iva_collected: number;  // sum(sales.iva_collected) — pre-calculated per sale
+  store_net: number;      // sum(sale_items.store_amount)
+  brand_total: number;    // sum(sale_items.brand_amount)
+  floor_income: number;   // sum of PAID brand floor rents this month
 }
 
 export function useMonthSalesSummary(month: string) {
   return useQuery({
     queryKey: ["month-sales-summary", month],
     queryFn: async (): Promise<MonthSalesSummary> => {
-      if (!month) return { gross_sales: 0, paid_card: 0, paid_transfer: 0, iva_collected: 0, store_net: 0, brand_total: 0 };
+      if (!month) return { gross_sales: 0, paid_card: 0, paid_transfer: 0, iva_collected: 0, store_net: 0, brand_total: 0, floor_income: 0 };
       const supabase = createClient();
 
       const [y, m] = month.split("-").map(Number);
@@ -138,18 +252,27 @@ export function useMonthSalesSummary(month: string) {
       if (idsErr) throw idsErr;
 
       const ids = (salesIds ?? []).map((s) => s.id);
-      if (ids.length === 0) return { gross_sales: 0, paid_card: 0, paid_transfer: 0, iva_collected: 0, store_net: 0, brand_total: 0 };
+      let store_net = 0, brand_total = 0;
+      if (ids.length > 0) {
+        const { data: itemsData, error: iErr } = await supabase
+          .from("sale_items")
+          .select("store_amount, brand_amount")
+          .in("sale_id", ids);
+        if (iErr) throw iErr;
+        store_net   = (itemsData ?? []).reduce((s, r) => s + Number(r.store_amount ?? 0), 0);
+        brand_total = (itemsData ?? []).reduce((s, r) => s + Number(r.brand_amount ?? 0), 0);
+      }
 
-      const { data: itemsData, error: iErr } = await supabase
-        .from("sale_items")
-        .select("store_amount, brand_amount")
-        .in("sale_id", ids);
-      if (iErr) throw iErr;
+      // Paid floor rents for the month (adds to distributable)
+      const { data: floorData, error: fErr } = await supabase
+        .from("brand_floor_rents")
+        .select("amount")
+        .eq("period_month", month)
+        .eq("status", "paid");
+      if (fErr) throw fErr;
+      const floor_income = (floorData ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
-      const store_net   = (itemsData ?? []).reduce((s, r) => s + Number(r.store_amount ?? 0), 0);
-      const brand_total = (itemsData ?? []).reduce((s, r) => s + Number(r.brand_amount ?? 0), 0);
-
-      return { gross_sales, paid_card, paid_transfer, iva_collected, store_net, brand_total };
+      return { gross_sales, paid_card, paid_transfer, iva_collected, store_net, brand_total, floor_income };
     },
     staleTime: 60_000,
     enabled: !!month,
@@ -182,8 +305,10 @@ export function useGenerateStoreLiquidacion() {
       const card_commission = summary.paid_card * CARD_RATE;
       const store_net       = summary.store_net;
       const brand_total     = summary.brand_total;
+      const floor_income    = summary.floor_income;
       const rent_deducted   = config.rent_amount;
-      const distributable   = Math.max(0, store_net - rent_deducted);
+      // distributable = store net from sales + floor rent income - local rent
+      const distributable   = Math.max(0, store_net + floor_income - rent_deducted);
 
       // Create header (upsert)
       const { data: liq, error: liqErr } = await supabase
@@ -195,6 +320,7 @@ export function useGenerateStoreLiquidacion() {
           card_commission,
           brand_total,
           store_net,
+          floor_income,
           rent_deducted,
           distributable,
           status: "draft",

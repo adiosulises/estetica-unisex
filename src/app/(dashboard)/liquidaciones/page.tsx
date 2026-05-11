@@ -12,8 +12,9 @@ import {
 } from "@/hooks/use-liquidaciones";
 import {
   useStoreLiquidacion, useMonthSalesSummary, useGenerateStoreLiquidacion,
-  useMarkItemPaid, LIQ_CATEGORY_LABELS, LIQ_CATEGORY_COLORS,
-  type StoreLiquidacionItem,
+  useMarkItemPaid, useFloorRentsForMonth, useUpsertFloorRent, useMarkFloorRentPaid,
+  LIQ_CATEGORY_LABELS, LIQ_CATEGORY_COLORS,
+  type StoreLiquidacionItem, type BrandFloorRent,
 } from "@/hooks/use-store-liquidacion";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
@@ -162,10 +163,13 @@ function MarcasTab() {
 function TiendaTab({ month }: { month: string }) {
   const { data: liq, isLoading: liqLoading } = useStoreLiquidacion(month);
   const { data: summary, isLoading: sumLoading } = useMonthSalesSummary(month);
+  const { data: floorRents = [], isLoading: floorLoading } = useFloorRentsForMonth(month);
   const generate = useGenerateStoreLiquidacion();
-  const [payingItem, setPayingItem] = useState<StoreLiquidacionItem | null>(null);
+  const [payingItem, setPayingItem]   = useState<StoreLiquidacionItem | null>(null);
+  const [payingRent, setPayingRent]   = useState<BrandFloorRent | null>(null);
+  const [editingRent, setEditingRent] = useState<BrandFloorRent | null>(null);
 
-  const isLoading = liqLoading || sumLoading;
+  const isLoading = liqLoading || sumLoading || floorLoading;
 
   if (isLoading) {
     return (
@@ -176,12 +180,11 @@ function TiendaTab({ month }: { month: string }) {
   }
 
   // Summary bar
-  const gross    = summary?.gross_sales ?? 0;
-  // IVA shown in summary always uses card-only (the full rule lives in the hook / config)
-  const ivaBase  = summary?.paid_card ?? 0;
-  const iva      = ivaBase * (16 / 116);
-  const cc       = (summary?.paid_card ?? 0) * 0.046;
-  const storeNet = summary?.store_net ?? 0;
+  const gross      = summary?.gross_sales ?? 0;
+  const iva        = summary?.iva_collected ?? 0;
+  const cc         = (summary?.paid_card ?? 0) * 0.046;
+  const storeNet   = summary?.store_net ?? 0;
+  const floorIncome = summary?.floor_income ?? 0;
 
   async function handleGenerate() {
     if (!summary) return;
@@ -201,13 +204,68 @@ function TiendaTab({ month }: { month: string }) {
         <StatRow label="Pago a marcas"        value={-(summary?.brand_total ?? 0)} color="red" muted />
         <div className="border-t border-[var(--border)] my-1" />
         <StatRow label="Ingreso neto tienda"  value={storeNet}  bold />
+        {floorIncome > 0 && (
+          <StatRow label="+ Renta de piso cobrada" value={floorIncome} color="green" />
+        )}
         {liq && (
           <>
-            <StatRow label="Renta"            value={-liq.rent_deducted} color="red" muted />
+            <StatRow label="Renta local"      value={-liq.rent_deducted} color="red" muted />
             <StatRow label="Repartible"       value={liq.distributable}  bold color="green" />
           </>
         )}
       </div>
+
+      {/* Floor rents section */}
+      {floorRents.length > 0 && (
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 bg-[var(--muted)]/50 border-b border-[var(--border)]">
+            <p className="text-sm font-semibold text-[var(--foreground)]">Rentas de piso</p>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {floorRents.filter((r) => r.status === "paid").length}/{floorRents.length} cobradas
+            </p>
+          </div>
+          {floorRents.map((rent, i) => (
+            <div
+              key={rent.brand_id}
+              className={`flex items-center justify-between px-4 py-3 ${
+                i < floorRents.length - 1 ? "border-b border-[var(--border)]" : ""
+              }`}
+            >
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">{rent.brand_name}</p>
+                {rent.paid_at ? (
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    Cobrado {new Date(rent.paid_at).toLocaleDateString("es-MX", { dateStyle: "short" })}
+                    {rent.payment_method ? ` · ${pmLabel(rent.payment_method)}` : ""}
+                  </p>
+                ) : (
+                  <p className="text-xs text-amber-600">Pendiente de cobro</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-sm font-bold text-[var(--foreground)]">
+                  {formatCurrency(rent.amount)}
+                </span>
+                {rent.status === "paid" ? (
+                  <CheckCircle2 size={16} className="text-green-500" />
+                ) : (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setEditingRent(rent)}
+                      className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] px-2 py-1 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] transition-colors"
+                    >
+                      Editar
+                    </button>
+                    <Button size="sm" onClick={() => setPayingRent(rent)}>
+                      Cobrar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Generate / refresh button */}
       {!liq ? (
@@ -324,7 +382,7 @@ function TiendaTab({ month }: { month: string }) {
         </>
       )}
 
-      {/* Pay modal */}
+      {/* Pay liquidation item modal */}
       <Modal
         open={!!payingItem}
         onClose={() => setPayingItem(null)}
@@ -335,6 +393,36 @@ function TiendaTab({ month }: { month: string }) {
           <PayItemForm
             item={payingItem}
             onClose={() => setPayingItem(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Cobrar renta de piso modal */}
+      <Modal
+        open={!!payingRent}
+        onClose={() => setPayingRent(null)}
+        title="Cobrar renta de piso"
+        size="sm"
+      >
+        {payingRent && (
+          <PayFloorRentForm
+            rent={payingRent}
+            onClose={() => setPayingRent(null)}
+          />
+        )}
+      </Modal>
+
+      {/* Editar monto de renta modal */}
+      <Modal
+        open={!!editingRent}
+        onClose={() => setEditingRent(null)}
+        title="Editar monto de renta"
+        size="sm"
+      >
+        {editingRent && (
+          <EditFloorRentForm
+            rent={editingRent}
+            onClose={() => setEditingRent(null)}
           />
         )}
       </Modal>
@@ -463,6 +551,139 @@ function PayItemForm({
           {markPaid.isPending
             ? <><Loader2 size={14} className="animate-spin" /> Pagando...</>
             : `Pagar ${formatCurrency(item.allocated_amount)}`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Pay floor rent form ──────────────────────────────────────────────────────
+
+function PayFloorRentForm({ rent, onClose }: { rent: BrandFloorRent; onClose: () => void }) {
+  const [method, setMethod] = useState("transfer");
+  const [notes, setNotes]   = useState("");
+  const [err, setErr]       = useState<string | null>(null);
+  const markPaid = useMarkFloorRentPaid();
+
+  async function handlePay() {
+    if (!rent.id) { setErr("Primero guarda el registro de renta."); return; }
+    setErr(null);
+    try {
+      await markPaid.mutateAsync({ rentId: rent.id, paymentMethod: method, notes: notes || undefined });
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="p-6 flex flex-col gap-4">
+      <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex justify-between items-center">
+        <div>
+          <p className="text-xs text-[var(--muted-foreground)]">Renta de piso</p>
+          <p className="text-sm font-semibold text-[var(--foreground)]">{rent.brand_name}</p>
+        </div>
+        <p className="text-lg font-bold font-mono text-[var(--foreground)]">{formatCurrency(rent.amount)}</p>
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Medio de pago</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          {PAYMENT_METHODS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setMethod(value)}
+              className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                method === value
+                  ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                  : "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--primary)]"
+              }`}
+            >
+              <Icon size={15} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <textarea
+        placeholder="Notas (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={2}
+        className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
+      />
+      {err && <p className="text-xs text-[var(--destructive)]">{err}</p>}
+      <div className="flex gap-2">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
+          Cancelar
+        </button>
+        <Button onClick={handlePay} disabled={markPaid.isPending} className="flex-1">
+          {markPaid.isPending
+            ? <><Loader2 size={14} className="animate-spin" /> Registrando...</>
+            : `Cobrar ${formatCurrency(rent.amount)}`}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit floor rent amount form ──────────────────────────────────────────────
+
+function EditFloorRentForm({ rent, onClose }: { rent: BrandFloorRent; onClose: () => void }) {
+  const [amount, setAmount] = useState(rent.amount.toString());
+  const [notes, setNotes]   = useState(rent.notes ?? "");
+  const [err, setErr]       = useState<string | null>(null);
+  const upsert = useUpsertFloorRent();
+
+  async function handleSave() {
+    const parsed = parseFloat(amount);
+    if (isNaN(parsed) || parsed <= 0) { setErr("Monto inválido"); return; }
+    setErr(null);
+    try {
+      await upsert.mutateAsync({
+        brand_id: rent.brand_id,
+        period_month: rent.period_month,
+        amount: parsed,
+        notes: notes || undefined,
+      });
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="p-6 flex flex-col gap-4">
+      <div className="bg-[var(--muted)] rounded-xl px-4 py-3">
+        <p className="text-xs text-[var(--muted-foreground)]">Marca</p>
+        <p className="text-sm font-semibold text-[var(--foreground)]">{rent.brand_name}</p>
+      </div>
+      <div>
+        <label className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide block mb-1.5">
+          Monto a cobrar este mes
+        </label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+        />
+      </div>
+      <textarea
+        placeholder="Notas (opcional)"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        rows={2}
+        className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none"
+      />
+      {err && <p className="text-xs text-[var(--destructive)]">{err}</p>}
+      <div className="flex gap-2">
+        <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
+          Cancelar
+        </button>
+        <Button onClick={handleSave} disabled={upsert.isPending} className="flex-1">
+          {upsert.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : "Guardar"}
         </Button>
       </div>
     </div>
