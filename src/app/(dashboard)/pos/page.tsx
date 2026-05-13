@@ -36,10 +36,15 @@ export default function PosPage() {
       const existing = prev.find((c) => c.variantId === v.id);
       if (existing) {
         if (existing.quantity >= existing.stock) return prev;
+        const newQty = existing.quantity + 1;
         return prev.map((c) =>
-          c.variantId === v.id ? { ...c, quantity: c.quantity + 1 } : c
+          c.variantId === v.id
+            ? { ...c, quantity: newQty, discount: Math.round(c.unitPrice * newQty * c.discountPct * 100) / 100 }
+            : c
         );
       }
+      const unitPrice   = v.price ?? v.basePrice;
+      const discountPct = v.discountPct ?? 0;
       return [
         ...prev,
         {
@@ -50,10 +55,11 @@ export default function PosPage() {
           photoUrl:    v.photoUrl,
           size:        v.size,
           color:       v.color,
-          unitPrice:   v.price ?? v.basePrice,
+          unitPrice,
+          discountPct,
           stock:       v.stock,
           quantity:    1,
-          discount:    0,
+          discount:    Math.round(unitPrice * discountPct * 100) / 100,
         },
       ];
     });
@@ -63,11 +69,11 @@ export default function PosPage() {
 
   function updateQty(variantId: string, delta: number) {
     setCart((prev) =>
-      prev.map((c) =>
-        c.variantId === variantId
-          ? { ...c, quantity: Math.min(c.stock, Math.max(1, c.quantity + delta)) }
-          : c
-      )
+      prev.map((c) => {
+        if (c.variantId !== variantId) return c;
+        const newQty = Math.min(c.stock, Math.max(1, c.quantity + delta));
+        return { ...c, quantity: newQty, discount: Math.round(c.unitPrice * newQty * c.discountPct * 100) / 100 };
+      })
     );
   }
 
@@ -92,12 +98,12 @@ export default function PosPage() {
     const supabase = createClient();
     type RawVariant = {
       id: string; sku: string; size: string | null; color: string | null;
-      price: number | null; stock: number;
+      price: number | null; discount_pct: number; stock: number;
       product: { id: string; name: string; base_price: number; photo_url: string | null; brand: { name: string } | null } | null;
     };
     const { data, error } = await supabase
       .from("product_variants")
-      .select("id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))")
+      .select("id, sku, size, color, price, discount_pct, stock, product:products(id, name, base_price, photo_url, brand:brands(name))")
       .eq("sku", sku)
       .eq("is_active", true)
       .gt("stock", 0)
@@ -107,7 +113,8 @@ export default function PosPage() {
 
     const v = data as RawVariant;
     addToCart({
-      id: v.id, sku: v.sku, size: v.size, color: v.color, price: v.price, stock: v.stock,
+      id: v.id, sku: v.sku, size: v.size, color: v.color, price: v.price,
+      discountPct: Number(v.discount_pct ?? 0), stock: v.stock,
       productId: v.product?.id ?? "", productName: v.product?.name ?? "",
       basePrice: v.product?.base_price ?? 0, photoUrl: v.product?.photo_url ?? null,
       brandName: v.product?.brand?.name ?? null,

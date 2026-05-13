@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/pos", label: "POS", icon: ShoppingCart },
   { href: "/caja", label: "Caja", icon: Wallet },
   { href: "/historial", label: "Historial ventas", icon: Receipt },
+  { href: "/reportes", label: "Reportes", icon: BarChart2 },
   { href: "/transacciones", label: "Transacciones", icon: ArrowLeftRight },
   { href: "/liquidaciones", label: "Liquidaciones", icon: Banknote },
   { href: "/sueldos", label: "Sueldos", icon: DollarSign },

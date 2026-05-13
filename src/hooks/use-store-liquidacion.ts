@@ -125,7 +125,7 @@ export function useMarkFloorRentPaid() {
       const { error } = await supabase.rpc("mark_floor_rent_paid", {
         p_rent_id:        rentId,
         p_payment_method: paymentMethod,
-        p_notes:          notes ?? null,
+        p_notes:          notes ?? undefined,
       });
       if (error) throw error;
     },

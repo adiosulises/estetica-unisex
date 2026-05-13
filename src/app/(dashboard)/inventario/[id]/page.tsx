@@ -161,10 +161,26 @@ export default function ProductoDetallePage({
                 <td className="px-4 py-3 font-mono text-xs text-[var(--foreground)]">{v.sku}</td>
                 <td className="px-4 py-3 text-[var(--foreground)]">{v.size ?? "—"}</td>
                 <td className="px-4 py-3 text-[var(--muted-foreground)]">{v.color ?? "—"}</td>
-                <td className="px-4 py-3 text-[var(--foreground)]">
-                  {v.price != null ? formatCurrency(v.price) : (
-                    <span className="text-[var(--muted-foreground)] text-xs">Base ({formatCurrency(producto.base_price)})</span>
-                  )}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    {v.discount_pct > 0 ? (
+                      <>
+                        <span className="line-through text-[var(--muted-foreground)] text-xs">
+                          {formatCurrency(v.price ?? producto.base_price)}
+                        </span>
+                        <span className="text-[var(--foreground)] font-medium">
+                          {formatCurrency((v.price ?? producto.base_price) * (1 - v.discount_pct))}
+                        </span>
+                        <span className="text-xs font-bold text-white bg-red-500 rounded px-1 py-0.5">
+                          -{Math.round(v.discount_pct * 100)}%
+                        </span>
+                      </>
+                    ) : v.price != null ? (
+                      <span className="text-[var(--foreground)]">{formatCurrency(v.price)}</span>
+                    ) : (
+                      <span className="text-[var(--muted-foreground)] text-xs">Base ({formatCurrency(producto.base_price)})</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <InlineStockEdit
@@ -504,12 +520,19 @@ function EditVarianteForm({
   onSave: (data: Partial<Variante>) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [size, setSize] = useState(variante.size ?? "");
-  const [color, setColor] = useState(variante.color ?? "");
-  const [price, setPrice] = useState(variante.price != null ? String(variante.price) : "");
-  const [stock, setStock] = useState(String(variante.stock));
+  const [size, setSize]           = useState(variante.size ?? "");
+  const [color, setColor]         = useState(variante.color ?? "");
+  const [price, setPrice]         = useState(variante.price != null ? String(variante.price) : "");
+  const [discountPct, setDiscountPct] = useState(
+    variante.discount_pct > 0 ? String(Math.round(variante.discount_pct * 100)) : ""
+  );
+  const [stock, setStock]         = useState(String(variante.stock));
   const [threshold, setThreshold] = useState(String(variante.low_stock_threshold));
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]       = useState(false);
+
+  const effectivePrice = price ? parseFloat(price) : basePrice;
+  const pct = parseFloat(discountPct) || 0;
+  const discountedPrice = pct > 0 ? effectivePrice * (1 - pct / 100) : null;
 
   async function handleSave() {
     setSaving(true);
@@ -517,6 +540,7 @@ function EditVarianteForm({
       size: size || null,
       color: color || null,
       price: price ? parseFloat(price) : null,
+      discount_pct: pct > 0 ? pct / 100 : 0,
       stock: parseInt(stock, 10),
       low_stock_threshold: parseInt(threshold, 10),
     });
@@ -529,14 +553,25 @@ function EditVarianteForm({
         <Input label="Talla" value={size} onChange={(e) => setSize(e.target.value)} placeholder="M" />
         <Input label="Color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Negro" />
       </div>
-      <Input
-        label={`Precio (vacío = base ${formatCurrency(basePrice)})`}
-        type="number"
-        step="0.01"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder={String(basePrice)}
-      />
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label={`Precio (vacío = base ${formatCurrency(basePrice)})`}
+          type="number" step="0.01"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder={String(basePrice)}
+        />
+        <div>
+          <Input
+            label="Descuento %"
+            type="number" min="0" max="99" step="1"
+            value={discountPct}
+            onChange={(e) => setDiscountPct(e.target.value)}
+            placeholder="0"
+            hint={discountedPrice != null ? `Precio final: ${formatCurrency(discountedPrice)}` : "Sin descuento"}
+          />
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <Input label="Stock" type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} />
         <Input label="Alerta bajo" type="number" min="0" value={threshold} onChange={(e) => setThreshold(e.target.value)} hint="Avisar cuando ≤ este número" />
@@ -557,15 +592,20 @@ function AddVarianteForm({
   onCancel,
 }: {
   basePrice: number;
-  onSave: (data: { size?: string; color?: string; price?: number; stock: number; low_stock_threshold: number }) => Promise<void>;
+  onSave: (data: { size?: string; color?: string; price?: number; discount_pct?: number; stock: number; low_stock_threshold: number }) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [size, setSize] = useState("");
-  const [color, setColor] = useState("");
-  const [price, setPrice] = useState("");
-  const [stock, setStock] = useState("1");
-  const [threshold, setThreshold] = useState("0");
-  const [saving, setSaving] = useState(false);
+  const [size, setSize]               = useState("");
+  const [color, setColor]             = useState("");
+  const [price, setPrice]             = useState("");
+  const [discountPct, setDiscountPct] = useState("");
+  const [stock, setStock]             = useState("1");
+  const [threshold, setThreshold]     = useState("0");
+  const [saving, setSaving]           = useState(false);
+
+  const effectivePrice   = price ? parseFloat(price) : basePrice;
+  const pct              = parseFloat(discountPct) || 0;
+  const discountedPrice  = pct > 0 ? effectivePrice * (1 - pct / 100) : null;
 
   async function handleSave() {
     setSaving(true);
@@ -573,6 +613,7 @@ function AddVarianteForm({
       size: size || undefined,
       color: color || undefined,
       price: price ? parseFloat(price) : undefined,
+      discount_pct: pct > 0 ? pct / 100 : 0,
       stock: parseInt(stock, 10),
       low_stock_threshold: parseInt(threshold, 10),
     });
@@ -585,14 +626,23 @@ function AddVarianteForm({
         <Input label="Talla" value={size} onChange={(e) => setSize(e.target.value)} placeholder="M" />
         <Input label="Color" value={color} onChange={(e) => setColor(e.target.value)} placeholder="Negro" />
       </div>
-      <Input
-        label={`Precio (vacío = base ${formatCurrency(basePrice)})`}
-        type="number"
-        step="0.01"
-        value={price}
-        onChange={(e) => setPrice(e.target.value)}
-        placeholder={String(basePrice)}
-      />
+      <div className="grid grid-cols-2 gap-4">
+        <Input
+          label={`Precio (vacío = base ${formatCurrency(basePrice)})`}
+          type="number" step="0.01"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+          placeholder={String(basePrice)}
+        />
+        <Input
+          label="Descuento %"
+          type="number" min="0" max="99" step="1"
+          value={discountPct}
+          onChange={(e) => setDiscountPct(e.target.value)}
+          placeholder="0"
+          hint={discountedPrice != null ? `Precio final: ${formatCurrency(discountedPrice)}` : "Sin descuento"}
+        />
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <Input label="Stock inicial" type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} />
         <Input label="Alerta bajo" type="number" min="0" value={threshold} onChange={(e) => setThreshold(e.target.value)} />

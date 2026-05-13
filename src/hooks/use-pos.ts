@@ -31,7 +31,7 @@ export function useSearchVariantes(query: string) {
       const skuPromise = supabase
         .from("product_variants")
         .select(
-          "id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
+          "id, sku, size, color, price, discount_pct, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
         )
         .ilike("sku", `%${q}%`)
         .eq("is_active", true)
@@ -57,6 +57,7 @@ export function useSearchVariantes(query: string) {
         size: string | null;
         color: string | null;
         price: number | null;
+        discount_pct: number;
         stock: number;
         product: {
           id: string;
@@ -73,6 +74,7 @@ export function useSearchVariantes(query: string) {
         size: v.size,
         color: v.color,
         price: v.price,
+        discountPct: Number(v.discount_pct ?? 0),
         stock: v.stock,
         productId: v.product?.id ?? "",
         productName: v.product?.name ?? "",
@@ -92,7 +94,7 @@ export function useSearchVariantes(query: string) {
       const { data: byNameData, error: nameVarErr } = await supabase
         .from("product_variants")
         .select(
-          "id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
+          "id, sku, size, color, price, discount_pct, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
         )
         .in("product_id", productIds)
         .eq("is_active", true)

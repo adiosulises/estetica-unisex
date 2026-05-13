@@ -30,6 +30,7 @@ export interface Variante {
   size: string | null;
   color: string | null;
   price: number | null;
+  discount_pct: number;   // 0–0.9999, e.g. 0.20 = 20% off
   stock: number;
   low_stock_threshold: number;
   is_active: boolean;

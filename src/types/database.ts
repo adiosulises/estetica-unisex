@@ -705,6 +705,7 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          discount_pct: number
           id: string
           is_active: boolean
           low_stock_threshold: number
@@ -718,6 +719,7 @@ export type Database = {
         Insert: {
           color?: string | null
           created_at?: string
+          discount_pct?: number
           id?: string
           is_active?: boolean
           low_stock_threshold?: number
@@ -731,6 +733,7 @@ export type Database = {
         Update: {
           color?: string | null
           created_at?: string
+          discount_pct?: number
           id?: string
           is_active?: boolean
           low_stock_threshold?: number
@@ -1110,6 +1113,50 @@ export type Database = {
         }
         Relationships: []
       }
+      brand_floor_rents: {
+        Row: {
+          id: string
+          brand_id: string
+          period_month: string
+          amount: number
+          payment_method: string | null
+          status: string
+          paid_at: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_id: string
+          period_month: string
+          amount: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_id?: string
+          period_month?: string
+          amount?: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_floor_rents_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       store_liquidations: {
         Row: {
           id: string
@@ -1120,6 +1167,7 @@ export type Database = {
           brand_total: number
           store_net: number
           rent_deducted: number
+          floor_income: number
           distributable: number
           status: string
           notes: string | null
@@ -1134,6 +1182,7 @@ export type Database = {
           brand_total?: number
           store_net?: number
           rent_deducted?: number
+          floor_income?: number
           distributable?: number
           status?: string
           notes?: string | null
@@ -1148,6 +1197,7 @@ export type Database = {
           brand_total?: number
           store_net?: number
           rent_deducted?: number
+          floor_income?: number
           distributable?: number
           status?: string
           notes?: string | null
@@ -1232,6 +1282,14 @@ export type Database = {
           p_category: string
           p_new_balance: number
           p_set_by_name: string
+          p_notes?: string
+        }
+        Returns: undefined
+      }
+      mark_floor_rent_paid: {
+        Args: {
+          p_rent_id: string
+          p_payment_method: string
           p_notes?: string
         }
         Returns: undefined

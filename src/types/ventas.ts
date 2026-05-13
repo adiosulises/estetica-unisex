@@ -7,9 +7,10 @@ export interface CartItem {
   size: string | null;
   color: string | null;
   unitPrice: number;
-  stock: number;       // stock actual (para validar max qty)
+  discountPct: number;  // porcentaje de descuento de la variante (0–1)
+  stock: number;        // stock actual (para validar max qty)
   quantity: number;
-  discount: number;    // descuento total de la línea (no por unidad)
+  discount: number;     // descuento total de la línea = unitPrice * qty * discountPct
 }
 
 export interface VarianteSearchResult {
@@ -19,6 +20,7 @@ export interface VarianteSearchResult {
   color: string | null;
   price: number | null;
   stock: number;
+  discountPct: number;
   productId: string;
   productName: string;
   basePrice: number;
