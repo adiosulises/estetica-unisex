@@ -6,6 +6,7 @@ import {
   CheckCircle2, Loader2, History, RefreshCw, Store,
   Users, Receipt,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import {
   usePendingByBrand, usePendingItems, useBrandPayouts, useCreatePayout,
   type BrandPending, type PendingItem,
@@ -566,10 +567,28 @@ function PayFloorRentForm({ rent, onClose }: { rent: BrandFloorRent; onClose: ()
   const markPaid = useMarkFloorRentPaid();
 
   async function handlePay() {
-    if (!rent.id) { setErr("Primero guarda el registro de renta."); return; }
     setErr(null);
     try {
-      await markPaid.mutateAsync({ rentId: rent.id, paymentMethod: method, notes: notes || undefined });
+      let rentId = rent.id;
+
+      // Si no hay fila en la DB todavía, la creamos primero
+      if (!rentId) {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("brand_floor_rents")
+          .upsert({
+            brand_id: rent.brand_id,
+            period_month: rent.period_month,
+            amount: rent.amount,
+            status: "pending",
+          }, { onConflict: "brand_id,period_month" })
+          .select("id")
+          .single();
+        if (error) throw error;
+        rentId = data.id;
+      }
+
+      await markPaid.mutateAsync({ rentId, paymentMethod: method, notes: notes || undefined });
       onClose();
     } catch (e) {
       setErr((e as Error).message);
