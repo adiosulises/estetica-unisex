@@ -120,12 +120,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-// ─── Función principal ────────────────────────────────────────────────────────
-export async function generateLabelsPdf(
+// ─── Función interna: construye el jsPDF sin hacer nada con él ───────────────
+async function buildPdf(
   labels: LabelData[],
   sheet: SheetConfig,
   startAt: number
-): Promise<void> {
+): Promise<InstanceType<typeof jsPDF>> {
   const {
     cols, rows,
     labelWidthMm, labelHeightMm,
@@ -135,8 +135,6 @@ export async function generateLabelsPdf(
   } = sheet;
 
   const labelsPerPage = cols * rows;
-
-  // Generar todas las imágenes de etiqueta en paralelo
   const labelImages = await Promise.all(labels.map(drawLabel));
 
   const pdf = new jsPDF({
@@ -165,5 +163,28 @@ export async function generateLabelsPdf(
     pdf.addImage(labelImages[i], "PNG", x, y, labelWidthMm, labelHeightMm);
   });
 
+  return pdf;
+}
+
+// ─── Descargar PDF ────────────────────────────────────────────────────────────
+export async function generateLabelsPdf(
+  labels: LabelData[],
+  sheet: SheetConfig,
+  startAt: number
+): Promise<void> {
+  const pdf = await buildPdf(labels, sheet, startAt);
   pdf.save(`etiquetas-${Date.now()}.pdf`);
+}
+
+// ─── Abrir diálogo de impresión del SO (sin descargar nada) ──────────────────
+export async function printLabelsPdf(
+  labels: LabelData[],
+  sheet: SheetConfig,
+  startAt: number
+): Promise<void> {
+  const pdf = await buildPdf(labels, sheet, startAt);
+  // autoPrint() inserta una acción JS para abrir el diálogo al cargar el PDF
+  pdf.autoPrint();
+  // Abre el PDF en una pestaña nueva — el diálogo de impresión aparece solo
+  window.open(pdf.output("bloburl"), "_blank");
 }
