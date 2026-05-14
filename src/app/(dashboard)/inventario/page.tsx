@@ -23,10 +23,14 @@ export default function InventarioPage() {
   // Set de product IDs seleccionados para etiquetas
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const { data: productos = [], isLoading } = useProductos({ brandId: brandId || undefined });
+  // Cargamos TODOS los productos siempre para que la selección de etiquetas
+  // no se pierda al cambiar el filtro de marca (el filtro se aplica client-side)
+  const { data: productos = [], isLoading } = useProductos();
   const { data: marcas = [] } = useMarcas();
 
   const filtered = productos.filter((p) => {
+    const matchesBrand = !brandId || p.brand_id === brandId;
+
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku_prefix.toLowerCase().includes(search.toLowerCase()) ||
@@ -40,7 +44,7 @@ export default function InventarioPage() {
       (stockFilter === "low" && status === "low") ||
       (stockFilter === "out" && status === "out");
 
-    return matchesSearch && matchesStock;
+    return matchesBrand && matchesSearch && matchesStock;
   });
 
   const totalVariantes = filtered.reduce(
@@ -303,10 +307,18 @@ export default function InventarioPage() {
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-4 bg-[var(--foreground)] text-[var(--background)] rounded-2xl px-5 py-3 shadow-2xl">
             <Tag size={16} />
-            <span className="text-sm font-medium">
-              {selectedIds.size} producto{selectedIds.size !== 1 ? "s" : ""} ·{" "}
-              {selectedSkus.length} variante{selectedSkus.length !== 1 ? "s" : ""}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium">
+                {selectedIds.size} producto{selectedIds.size !== 1 ? "s" : ""} ·{" "}
+                {selectedSkus.length} etiqueta{selectedSkus.length !== 1 ? "s" : ""}
+              </span>
+              {/* Aviso si hay selección de marcas ocultas por el filtro activo */}
+              {brandId && selectedIds.size > filtered.filter((p) => selectedIds.has(p.id)).length && (
+                <span className="text-[11px] opacity-60">
+                  Incluye selección de otras marcas
+                </span>
+              )}
+            </div>
             <button
               onClick={handlePrintSelected}
               className="bg-white text-black text-sm font-semibold px-4 py-1.5 rounded-xl hover:bg-white/90 transition-colors"
