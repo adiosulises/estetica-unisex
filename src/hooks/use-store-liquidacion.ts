@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/types/database";
 import { useConfig } from "@/hooks/use-configuracion";
 import { useEmpleados } from "@/hooks/use-empleados";
 
@@ -231,7 +232,7 @@ export function useMonthSalesSummary(month: string) {
       // Sales totals (including iva_collected stored per sale)
       const { data: salesData, error: sErr } = await supabase
         .from("sales")
-        .select("total, paid_card, paid_transfer, iva_collected")
+        .select("id, total, paid_card, paid_transfer, iva_collected")
         .eq("status", "completed")
         .gte("created_at", `${start}T00:00:00-07:00`)
         .lte("created_at", `${end}T23:59:59-07:00`);
@@ -242,16 +243,8 @@ export function useMonthSalesSummary(month: string) {
       const paid_transfer  = (salesData ?? []).reduce((s, r) => s + Number(r.paid_transfer), 0);
       const iva_collected  = (salesData ?? []).reduce((s, r) => s + Number(r.iva_collected ?? 0), 0);
 
-      // Sale items: store vs brand amounts
-      const { data: salesIds, error: idsErr } = await supabase
-        .from("sales")
-        .select("id")
-        .eq("status", "completed")
-        .gte("created_at", `${start}T00:00:00-07:00`)
-        .lte("created_at", `${end}T23:59:59-07:00`);
-      if (idsErr) throw idsErr;
-
-      const ids = (salesIds ?? []).map((s) => s.id);
+      // Reuse sale IDs from the query above — no second round-trip needed
+      const ids = (salesData ?? []).map((s) => s.id);
       let store_net = 0, brand_total = 0;
       if (ids.length > 0) {
         const { data: itemsData, error: iErr } = await supabase
@@ -310,21 +303,23 @@ export function useGenerateStoreLiquidacion() {
       // distributable = store net from sales + floor rent income - local rent
       const distributable   = Math.max(0, store_net + floor_income - rent_deducted);
 
-      // Create header (upsert)
+      // Create header (upsert) — typed explicitly to avoid overload resolution issues
+      type LiqInsert = Database["public"]["Tables"]["store_liquidations"]["Insert"];
+      const liqPayload: LiqInsert = {
+        period_month: month,
+        gross_sales: summary.gross_sales,
+        iva_amount,
+        card_commission,
+        brand_total,
+        store_net,
+        floor_income,
+        rent_deducted,
+        distributable,
+        status: "draft",
+      };
       const { data: liq, error: liqErr } = await supabase
         .from("store_liquidations")
-        .upsert({
-          period_month: month,
-          gross_sales: summary.gross_sales,
-          iva_amount,
-          card_commission,
-          brand_total,
-          store_net,
-          floor_income,
-          rent_deducted,
-          distributable,
-          status: "draft",
-        }, { onConflict: "period_month" })
+        .upsert(liqPayload, { onConflict: "period_month" })
         .select()
         .single();
       if (liqErr) throw liqErr;
