@@ -144,17 +144,17 @@ export default function TransaccionesPage() {
       </div>
 
       {/* ── IVA acumulado del mes ──────────────────────── */}
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#ef444420" }}>
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center" style={{ backgroundColor: "#ef444420" }}>
             <span className="text-xs font-bold" style={{ color: "#ef4444" }}>IVA</span>
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-sm font-medium text-[var(--foreground)]">IVA recaudado este mes</p>
-            <p className="text-xs text-[var(--muted-foreground)]">Acumulado de ventas con tarjeta (y/o transferencia si aplica)</p>
+            <p className="text-xs text-[var(--muted-foreground)] hidden sm:block">Acumulado de ventas con tarjeta (y/o transferencia si aplica)</p>
           </div>
         </div>
-        <p className="text-lg font-bold font-mono tabular-nums" style={{ color: "#ef4444" }}>
+        <p className="text-lg font-bold font-mono tabular-nums flex-shrink-0" style={{ color: "#ef4444" }}>
           {formatCurrency(ivaCollected)}
         </p>
       </div>

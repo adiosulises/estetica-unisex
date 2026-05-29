@@ -81,47 +81,46 @@ export default function InventarioPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto pb-28">
-      <div className="flex items-center justify-between mb-6">
+    <div className="px-4 py-6 pb-28 max-w-4xl mx-auto flex flex-col gap-5">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">Inventario</h1>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">Inventario</h1>
           <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
             {filtered.length} producto{filtered.length !== 1 ? "s" : ""} · {totalVariantes} variante{totalVariantes !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {printMode ? (
-            <Button variant="secondary" onClick={exitPrintMode}>
+            <Button variant="secondary" size="sm" onClick={exitPrintMode}>
               <X size={15} />
               Cancelar
             </Button>
           ) : (
-            <Button variant="secondary" onClick={() => setPrintMode(true)}>
+            <Button variant="secondary" size="sm" onClick={() => setPrintMode(true)}>
               <Tag size={15} />
               Etiquetas
             </Button>
           )}
           <Link href="/inventario/nuevo">
-            <Button>
+            <Button size="sm">
               <Plus size={16} />
-              Alta en batch
+              Alta
             </Button>
           </Link>
         </div>
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3 mb-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         {printMode && (
           <button
             onClick={toggleAll}
-            className="text-sm text-[var(--primary)] hover:underline"
+            className="text-sm text-[var(--primary)] hover:underline w-fit"
           >
             {selectedIds.size === filtered.length ? "Deseleccionar todo" : "Seleccionar todo"}
           </button>
         )}
-
-        <div className="relative flex-1 min-w-48 max-w-xs">
+        <div className="relative flex-1 min-w-0">
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
           <input
             type="text"
@@ -131,30 +130,28 @@ export default function InventarioPage() {
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
           />
         </div>
-
         <select
           value={brandId}
           onChange={(e) => setBrandId(e.target.value)}
-          className="px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] appearance-none cursor-pointer"
+          className="w-full sm:w-auto px-3 py-2 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] appearance-none cursor-pointer"
         >
           <option value="">Todas las marcas</option>
           {marcas.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
-
-        <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-sm">
+        <div className="flex rounded-lg border border-[var(--border)] overflow-hidden text-sm w-full sm:w-auto">
           {(["all", "low", "out"] as const).map((s) => (
             <button
               key={s}
               onClick={() => setStockFilter(s)}
-              className={`px-3 py-2 transition-colors ${
+              className={`flex-1 sm:flex-none px-3 py-2 transition-colors ${
                 stockFilter === s
                   ? "bg-[var(--primary)] text-white"
                   : "bg-[var(--background)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
               }`}
             >
-              {s === "all" ? "Todos" : s === "low" ? "Stock bajo" : "Agotados"}
+              {s === "all" ? "Todos" : s === "low" ? "Bajo" : "Agotados"}
             </button>
           ))}
         </div>
@@ -179,122 +176,73 @@ export default function InventarioPage() {
           )}
         </div>
       ) : (
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
-                {printMode && (
-                  <th className="px-4 py-3 w-10">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === filtered.length && filtered.length > 0}
-                      onChange={toggleAll}
-                      className="rounded accent-[var(--primary)]"
-                    />
-                  </th>
-                )}
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Producto</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Marca</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Categoría</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Precio</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Variantes</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((producto, i) => {
-                const variants = producto.product_variants ?? [];
-                const status = getProductStockStatus(variants);
-                const totalStock = variants.reduce((s, v) => s + v.stock, 0);
-                const isSelected = selectedIds.has(producto.id);
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+          {filtered.map((producto, i) => {
+            const variants = producto.product_variants ?? [];
+            const status = getProductStockStatus(variants);
+            const totalStock = variants.reduce((s, v) => s + v.stock, 0);
+            const isSelected = selectedIds.has(producto.id);
 
-                return (
-                  <tr
-                    key={producto.id}
-                    className={`transition-colors ${
-                      i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""
-                    } ${
-                      printMode
-                        ? isSelected
-                          ? "bg-[var(--primary)]/5 cursor-pointer"
-                          : "hover:bg-[var(--muted)] cursor-pointer"
-                        : "hover:bg-[var(--muted)] cursor-pointer"
-                    }`}
-                    onClick={() => printMode && toggleProduct(producto)}
-                  >
-                    {printMode && (
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleProduct(producto)}
-                          className="rounded accent-[var(--primary)]"
-                        />
-                      </td>
-                    )}
-                    <td className="px-4 py-3">
-                      {printMode ? (
-                        <div className="flex items-center gap-3">
-                          {producto.photo_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={producto.photo_url}
-                              alt={producto.name}
-                              className="w-9 h-9 rounded-lg object-cover border border-[var(--border)] flex-shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-9 rounded-lg bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
-                              <Package size={16} className="text-[var(--muted-foreground)]" />
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-[var(--foreground)]">{producto.name}</div>
-                            <div className="text-xs text-[var(--muted-foreground)] font-mono">{producto.sku_prefix}</div>
-                          </div>
-                        </div>
-                      ) : (
-                        <Link href={`/inventario/${producto.id}`} className="block">
-                          <div className="flex items-center gap-3">
-                            {producto.photo_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={producto.photo_url}
-                                alt={producto.name}
-                                className="w-9 h-9 rounded-lg object-cover border border-[var(--border)] flex-shrink-0"
-                              />
-                            ) : (
-                              <div className="w-9 h-9 rounded-lg bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
-                                <Package size={16} className="text-[var(--muted-foreground)]" />
-                              </div>
-                            )}
-                            <div>
-                              <div className="font-medium text-[var(--foreground)]">{producto.name}</div>
-                              <div className="text-xs text-[var(--muted-foreground)] font-mono">{producto.sku_prefix}</div>
-                            </div>
-                          </div>
-                        </Link>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                      {producto.brand?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                      {producto.category}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--foreground)]">
-                      {formatCurrency(producto.base_price)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                      {variants.length}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StockBadge status={status} stock={totalStock} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            const inner = (
+              <div className="flex items-center gap-3">
+                {printMode && (
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleProduct(producto)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded accent-[var(--primary)] flex-shrink-0"
+                  />
+                )}
+                {producto.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={producto.photo_url}
+                    alt={producto.name}
+                    className="w-11 h-11 rounded-xl object-cover border border-[var(--border)] flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-11 h-11 rounded-xl bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
+                    <Package size={18} className="text-[var(--muted-foreground)]" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--foreground)] truncate">{producto.name}</p>
+                  <p className="text-xs text-[var(--muted-foreground)] font-mono">{producto.sku_prefix}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {[producto.brand?.name, producto.category].filter(Boolean).join(" · ")}
+                    {variants.length > 0 && ` · ${variants.length} var.`}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-sm font-bold font-mono text-[var(--foreground)]">
+                    {formatCurrency(producto.base_price)}
+                  </span>
+                  <StockBadge status={status} stock={totalStock} />
+                </div>
+              </div>
+            );
+
+            return (
+              <div
+                key={producto.id}
+                className={`px-4 py-3 transition-colors ${
+                  i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""
+                } ${
+                  printMode
+                    ? isSelected ? "bg-[var(--primary)]/5 cursor-pointer" : "hover:bg-[var(--muted)] cursor-pointer"
+                    : "hover:bg-[var(--muted)]/50"
+                }`}
+                onClick={() => printMode && toggleProduct(producto)}
+              >
+                {printMode ? inner : (
+                  <Link href={`/inventario/${producto.id}`} className="block">
+                    {inner}
+                  </Link>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

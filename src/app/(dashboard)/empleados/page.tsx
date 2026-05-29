@@ -67,31 +67,29 @@ export default function EmpleadosPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+    <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-5">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">Empleados</h1>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">Empleados</h1>
           <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
             {filtered.length} empleado{filtered.length !== 1 ? "s" : ""}
           </p>
         </div>
         <Button onClick={() => setModal("crear")}>
           <Plus size={16} />
-          Nuevo empleado
+          Nuevo
         </Button>
       </div>
 
-      <div className="mb-4">
-        <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] cursor-pointer select-none w-fit">
-          <input
-            type="checkbox"
-            checked={showInactive}
-            onChange={(e) => setShowInactive(e.target.checked)}
-            className="rounded"
-          />
-          Mostrar inactivos
-        </label>
-      </div>
+      <label className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] cursor-pointer select-none w-fit">
+        <input
+          type="checkbox"
+          checked={showInactive}
+          onChange={(e) => setShowInactive(e.target.checked)}
+          className="rounded"
+        />
+        Mostrar inactivos
+      </label>
 
       {isLoading ? (
         <div className="text-sm text-[var(--muted-foreground)] py-12 text-center">Cargando...</div>
@@ -104,68 +102,54 @@ export default function EmpleadosPage() {
           </Button>
         </div>
       ) : (
-        <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Nombre</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Rol</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">% Sueldo</th>
-                <th className="text-left px-4 py-3 font-medium text-[var(--muted-foreground)]">Estado</th>
-                <th className="px-4 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((emp, i) => (
-                <tr
-                  key={emp.id}
-                  className={i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""}
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+          {filtered.map((emp, i) => (
+            <div
+              key={emp.id}
+              className={`px-4 py-4 flex items-start justify-between gap-3 ${i < filtered.length - 1 ? "border-b border-[var(--border)]" : ""}`}
+            >
+              {/* Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-[var(--foreground)] text-sm">{emp.full_name}</span>
+                  <Badge variant={emp.role === "admin" ? "default" : "outline"}>
+                    {emp.role === "admin" ? "Admin" : "Empleado"}
+                  </Badge>
+                  <Badge variant={emp.is_active ? "success" : "outline"}>
+                    {emp.is_active ? "Activo" : "Inactivo"}
+                  </Badge>
+                </div>
+                {emp.phone && (
+                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{emp.phone}</p>
+                )}
+                {emp.salary_pct > 0 && (
+                  <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                    Sueldo: {Math.round(emp.salary_pct * 100)}%
+                  </p>
+                )}
+              </div>
+              {/* Actions */}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <Button size="sm" variant="ghost" onClick={() => openEditar(emp)} title="Editar">
+                  <Pencil size={14} />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => openPassword(emp)} title="Cambiar contraseña">
+                  <KeyRound size={14} />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title={emp.is_active ? "Desactivar" : "Activar"}
+                  onClick={() => toggleActivo.mutate({ id: emp.id, is_active: !emp.is_active })}
                 >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-[var(--foreground)]">{emp.full_name}</div>
-                    {emp.phone && (
-                      <div className="text-xs text-[var(--muted-foreground)] mt-0.5">{emp.phone}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={emp.role === "admin" ? "default" : "outline"}>
-                      {emp.role === "admin" ? "Admin" : "Empleado"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-[var(--muted-foreground)]">
-                    {emp.salary_pct > 0
-                      ? `${Math.round(emp.salary_pct * 100)}%`
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={emp.is_active ? "success" : "outline"}>
-                      {emp.is_active ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => openEditar(emp)}>
-                        <Pencil size={14} />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openPassword(emp)}>
-                        <KeyRound size={14} />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => toggleActivo.mutate({ id: emp.id, is_active: !emp.is_active })}
-                      >
-                        {emp.is_active
-                          ? <UserX size={14} className="text-[var(--destructive)]" />
-                          : <UserCheck size={14} className="text-green-600" />
-                        }
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  {emp.is_active
+                    ? <UserX size={14} className="text-[var(--destructive)]" />
+                    : <UserCheck size={14} className="text-green-600" />
+                  }
+                </Button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -72,11 +72,11 @@ export function PaymentModal({ total, onConfirm, onClose }: PaymentModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      <div className="relative bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+      <div className="relative bg-[var(--card)] rounded-t-2xl sm:rounded-2xl border border-[var(--border)] shadow-2xl w-full max-w-sm sm:mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
           <div>
