@@ -63,7 +63,7 @@ export function useFloorRentsForMonth(month: string) {
         .eq("period_month", month);
       if (rErr) throw rErr;
 
-      const rentMap = new Map((rents ?? []).map((r) => [r.brand_id, r]));
+      const rentMap = new Map((rents ?? []).map((r: any) => [r.brand_id, r]));
 
       // Merge: one row per floor brand, using DB record if exists else default amount
       return floorBrands.map((b) => {
@@ -270,7 +270,7 @@ export function useMonthSalesSummary(month: string) {
         .eq("period_month", month)
         .eq("status", "paid");
       if (fErr) throw fErr;
-      const floor_income = (floorData ?? []).reduce((s, r) => s + Number(r.amount), 0);
+      const floor_income = (floorData ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0);
 
       return { gross_sales, paid_card, paid_transfer, iva_collected, store_net, brand_total, floor_income };
     },
