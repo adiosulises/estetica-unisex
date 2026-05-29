@@ -1,5 +1,6 @@
 // Auto-generado desde Supabase — no editar manualmente
 // Última actualización: 2026-05-04
+// Extendido manualmente: brand_floor_rents table + mark_floor_rent_paid RPC (2026-05-29)
 
 export type Json =
   | string
@@ -57,6 +58,50 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_floor_rents: {
+        Row: {
+          id: string
+          brand_id: string
+          period_month: string
+          amount: number
+          payment_method: string | null
+          status: string
+          paid_at: string | null
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          brand_id: string
+          period_month: string
+          amount: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          brand_id?: string
+          period_month?: string
+          amount?: number
+          payment_method?: string | null
+          status?: string
+          paid_at?: string | null
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_floor_rents_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
@@ -1237,6 +1282,14 @@ export type Database = {
         Returns: undefined
       }
       my_role: { Args: never; Returns: string }
+      mark_floor_rent_paid: {
+        Args: {
+          p_rent_id: string
+          p_payment_method: string
+          p_notes?: string | null
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       movement_type:

@@ -27,18 +27,6 @@ export interface StoreLiquidacion {
 
 // ─── Floor rents ──────────────────────────────────────────────────────────────
 
-// Row shape returned by brand_floor_rents (table not yet in generated types)
-interface FloorRentRow {
-  id: string;
-  brand_id: string;
-  period_month: string;
-  amount: number;
-  payment_method: string | null;
-  status: string;
-  paid_at: string | null;
-  notes: string | null;
-}
-
 export interface BrandFloorRent {
   id: string;
   brand_id: string;
@@ -69,13 +57,13 @@ export function useFloorRentsForMonth(month: string) {
       if (!floorBrands?.length) return [];
 
       // Get existing rent records for this month
-      const { data: rents, error: rErr } = await (supabase as any)
+      const { data: rents, error: rErr } = await supabase
         .from("brand_floor_rents")
         .select("*")
-        .eq("period_month", month) as { data: FloorRentRow[] | null; error: unknown };
+        .eq("period_month", month);
       if (rErr) throw rErr;
 
-      const rentMap = new Map<string, FloorRentRow>((rents ?? []).map((r) => [r.brand_id, r]));
+      const rentMap = new Map((rents ?? []).map((r) => [r.brand_id, r]));
 
       // Merge: one row per floor brand, using DB record if exists else default amount
       return floorBrands.map((b) => {
@@ -107,7 +95,7 @@ export function useUpsertFloorRent() {
       brand_id: string; period_month: string; amount: number; notes?: string;
     }) => {
       const supabase = createClient();
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("brand_floor_rents")
         .upsert({
           brand_id,
@@ -276,11 +264,11 @@ export function useMonthSalesSummary(month: string) {
       }
 
       // Paid floor rents for the month (adds to distributable)
-      const { data: floorData, error: fErr } = await (supabase as any)
+      const { data: floorData, error: fErr } = await supabase
         .from("brand_floor_rents")
         .select("amount")
         .eq("period_month", month)
-        .eq("status", "paid") as { data: Pick<FloorRentRow, "amount">[] | null; error: unknown };
+        .eq("status", "paid");
       if (fErr) throw fErr;
       const floor_income = (floorData ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
