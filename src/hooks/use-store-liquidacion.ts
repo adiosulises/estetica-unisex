@@ -27,6 +27,18 @@ export interface StoreLiquidacion {
 
 // ─── Floor rents ──────────────────────────────────────────────────────────────
 
+// Row shape returned by brand_floor_rents (table not yet in generated types)
+interface FloorRentRow {
+  id: string;
+  brand_id: string;
+  period_month: string;
+  amount: number;
+  payment_method: string | null;
+  status: string;
+  paid_at: string | null;
+  notes: string | null;
+}
+
 export interface BrandFloorRent {
   id: string;
   brand_id: string;
@@ -60,10 +72,10 @@ export function useFloorRentsForMonth(month: string) {
       const { data: rents, error: rErr } = await (supabase as any)
         .from("brand_floor_rents")
         .select("*")
-        .eq("period_month", month);
+        .eq("period_month", month) as { data: FloorRentRow[] | null; error: unknown };
       if (rErr) throw rErr;
 
-      const rentMap = new Map((rents ?? []).map((r: any) => [r.brand_id, r]));
+      const rentMap = new Map<string, FloorRentRow>((rents ?? []).map((r) => [r.brand_id, r]));
 
       // Merge: one row per floor brand, using DB record if exists else default amount
       return floorBrands.map((b) => {
@@ -268,9 +280,9 @@ export function useMonthSalesSummary(month: string) {
         .from("brand_floor_rents")
         .select("amount")
         .eq("period_month", month)
-        .eq("status", "paid");
+        .eq("status", "paid") as { data: Pick<FloorRentRow, "amount">[] | null; error: unknown };
       if (fErr) throw fErr;
-      const floor_income = (floorData ?? []).reduce((s: number, r: any) => s + Number(r.amount), 0);
+      const floor_income = (floorData ?? []).reduce((s, r) => s + Number(r.amount), 0);
 
       return { gross_sales, paid_card, paid_transfer, iva_collected, store_net, brand_total, floor_income };
     },
