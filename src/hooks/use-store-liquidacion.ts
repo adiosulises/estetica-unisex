@@ -57,7 +57,7 @@ export function useFloorRentsForMonth(month: string) {
       if (!floorBrands?.length) return [];
 
       // Get existing rent records for this month
-      const { data: rents, error: rErr } = await supabase
+      const { data: rents, error: rErr } = await (supabase as any)
         .from("brand_floor_rents")
         .select("*")
         .eq("period_month", month);
@@ -95,7 +95,7 @@ export function useUpsertFloorRent() {
       brand_id: string; period_month: string; amount: number; notes?: string;
     }) => {
       const supabase = createClient();
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("brand_floor_rents")
         .upsert({
           brand_id,
@@ -264,7 +264,7 @@ export function useMonthSalesSummary(month: string) {
       }
 
       // Paid floor rents for the month (adds to distributable)
-      const { data: floorData, error: fErr } = await supabase
+      const { data: floorData, error: fErr } = await (supabase as any)
         .from("brand_floor_rents")
         .select("amount")
         .eq("period_month", month)
