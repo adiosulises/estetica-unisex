@@ -1164,6 +1164,7 @@ export type Database = {
           card_commission: number
           brand_total: number
           store_net: number
+          floor_income: number
           rent_deducted: number
           distributable: number
           status: string
@@ -1178,6 +1179,7 @@ export type Database = {
           card_commission?: number
           brand_total?: number
           store_net?: number
+          floor_income?: number
           rent_deducted?: number
           distributable?: number
           status?: string
@@ -1192,6 +1194,7 @@ export type Database = {
           card_commission?: number
           brand_total?: number
           store_net?: number
+          floor_income?: number
           rent_deducted?: number
           distributable?: number
           status?: string
