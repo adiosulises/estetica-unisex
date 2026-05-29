@@ -48,7 +48,7 @@ function useDashboardStats() {
           .lt("created_at", `${today}T23:59:59-07:00`),
         supabase
           .from("sales")
-          .select("total")
+          .select("total, sale_items(store_amount)")
           .eq("status", "completed")
           .gte("created_at", `${month}T00:00:00-07:00`),
         supabase
@@ -73,6 +73,7 @@ function useDashboardStats() {
         today_card:     todaySales.reduce((s, r) => s + Number(r.paid_card), 0),
         today_transfer: todaySales.reduce((s, r) => s + Number(r.paid_transfer), 0),
         month_total:    monthSales.reduce((s, r) => s + Number(r.total), 0),
+        month_store_net: monthSales.reduce((s, r) => s + (r.sale_items ?? []).reduce((si: number, item: any) => si + Number(item.store_amount ?? 0), 0), 0),
         month_count:    monthSales.length,
         pending_brands: unpaid.reduce((s: number, r: any) => s + Number(r.brand_amount), 0),
       };
@@ -209,12 +210,13 @@ export default function DashboardPage() {
   const { data: recentSales = [] } = useRecentSales();
   const { data: config }          = useConfig();
 
-  const monthlyGoal   = config?.monthly_goal ?? 0;
-  const monthTotal    = stats?.month_total ?? 0;
-  const goalPct       = monthlyGoal > 0 ? Math.min(100, (monthTotal / monthlyGoal) * 100) : 0;
-  const remaining     = Math.max(0, monthlyGoal - monthTotal);
-  const daysLeft      = daysRemainingInMonth();
-  const dailyTarget   = daysLeft > 0 ? remaining / daysLeft : 0;
+  const monthlyGoal    = config?.monthly_goal ?? 0;
+  const monthTotal     = stats?.month_total ?? 0;
+  const monthStoreNet  = stats?.month_store_net ?? 0;
+  const goalPct        = monthlyGoal > 0 ? Math.min(100, (monthStoreNet / monthlyGoal) * 100) : 0;
+  const remaining      = Math.max(0, monthlyGoal - monthStoreNet);
+  const daysLeft       = daysRemainingInMonth();
+  const dailyTarget    = daysLeft > 0 ? remaining / daysLeft : 0;
 
   const monthChange   = lastMonth > 0
     ? ((monthTotal - lastMonth) / lastMonth) * 100
@@ -292,8 +294,8 @@ export default function DashboardPage() {
 
           <div className="grid grid-cols-3 gap-3 text-xs">
             <div>
-              <p className="text-[var(--muted-foreground)]">Vendido</p>
-              <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(monthTotal)}</p>
+              <p className="text-[var(--muted-foreground)]">Neto tienda</p>
+              <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(monthStoreNet)}</p>
             </div>
             <div>
               <p className="text-[var(--muted-foreground)]">Meta</p>
