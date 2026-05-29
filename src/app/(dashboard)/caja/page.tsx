@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   Wallet, TrendingUp, Banknote, CreditCard, ArrowLeftRight,
   Plus, Minus, CheckCircle2, Lock, ChevronDown, ChevronUp,
-  Loader2, Unlock, AlertTriangle, History,
+  Loader2, Unlock, AlertTriangle, History, Calculator, X,
 } from "lucide-react";
 import {
   useTodayRegister, useTodaySales, useTodayMovements,
@@ -122,7 +122,7 @@ function OpenCajaCard() {
         </div>
       </div>
       <div className="flex flex-col gap-3">
-        <AmountField label="Efectivo en caja" icon={<Banknote size={14} />} value={cash} onChange={setCash} autoFocus />
+        <AmountField label="Efectivo en caja" icon={<Banknote size={14} />} value={cash} onChange={setCash} autoFocus showCounter />
         <AmountField label="Saldo terminal (tarjeta)" icon={<CreditCard size={14} />} value={card} onChange={setCard} />
         <textarea
           placeholder="Notas (opcional)"
@@ -226,7 +226,7 @@ function OpenSummaryCard({
             <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
               Cuenta el dinero real
             </p>
-            <AmountField label="Efectivo contado" icon={<Banknote size={14} />} value={closingCash} onChange={setClosingCash} />
+            <AmountField label="Efectivo contado" icon={<Banknote size={14} />} value={closingCash} onChange={setClosingCash} showCounter />
             {hasCash && (
               <DiffRow label="Diferencia efectivo" diff={cashDiff} />
             )}
@@ -472,15 +472,122 @@ function MovimientosCard({
   );
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
-function AmountField({ label, icon, value, onChange, autoFocus }: {
-  label: string; icon: React.ReactNode; value: string;
-  onChange: (v: string) => void; autoFocus?: boolean;
+// ── Contador de efectivo ──────────────────────────────────────────────────────
+const BILLETES = [1000, 500, 200, 100, 50, 20];
+const MONEDAS  = [20, 10, 5, 2, 1];
+
+function ContadorEfectivo({ onConfirm, onClose }: {
+  onConfirm: (total: number) => void;
+  onClose: () => void;
 }) {
+  const initialCounts = () =>
+    Object.fromEntries([...BILLETES, ...MONEDAS].map((d) => [d, ""]));
+  const [counts, setCounts] = useState<Record<number, string>>(initialCounts);
+
+  const total = [...BILLETES, ...MONEDAS].reduce((sum, d) => {
+    const n = parseFloat(counts[d]);
+    return sum + (isNaN(n) ? 0 : n * d);
+  }, 0);
+
+  function set(denom: number, val: string) {
+    setCounts((prev) => ({ ...prev, [denom]: val }));
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm px-4 pb-4 sm:pb-0">
+      <div className="w-full max-w-sm bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2">
+            <Calculator size={16} className="text-[var(--primary)]" />
+            <span className="font-semibold text-sm text-[var(--foreground)]">Contar efectivo</span>
+          </div>
+          <button onClick={onClose} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-4">
+          {/* Billetes */}
+          <div>
+            <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Billetes</p>
+            <div className="flex flex-col gap-1.5">
+              {BILLETES.map((d) => (
+                <DenomRow key={d} denom={d} value={counts[d]} onChange={(v) => set(d, v)} />
+              ))}
+            </div>
+          </div>
+
+          {/* Monedas */}
+          <div>
+            <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Monedas</p>
+            <div className="flex flex-col gap-1.5">
+              {MONEDAS.map((d) => (
+                <DenomRow key={d} denom={d} value={counts[d]} onChange={(v) => set(d, v)} />
+              ))}
+            </div>
+          </div>
+
+          {/* Total */}
+          <div className="flex items-center justify-between bg-[var(--muted)] rounded-xl px-4 py-3">
+            <span className="text-sm font-semibold text-[var(--foreground)]">Total</span>
+            <span className="text-lg font-bold font-mono text-[var(--primary)]">{formatCurrency(total)}</span>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">
+              Cancelar
+            </button>
+            <Button onClick={() => { onConfirm(total); onClose(); }} className="flex-1">
+              Usar {formatCurrency(total)}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DenomRow({ denom, value, onChange }: {
+  denom: number; value: string; onChange: (v: string) => void;
+}) {
+  const subtotal = parseFloat(value) * denom;
+  return (
+    <div className="flex items-center gap-3">
+      <span className="w-14 text-right text-sm font-mono text-[var(--foreground)]">${denom}</span>
+      <span className="text-xs text-[var(--muted-foreground)]">×</span>
+      <input
+        type="number" inputMode="numeric" placeholder="0" value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-20 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-sm text-center focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+      />
+      <span className="flex-1 text-right text-sm font-mono text-[var(--muted-foreground)]">
+        {!isNaN(subtotal) && parseFloat(value) > 0 ? formatCurrency(subtotal) : "—"}
+      </span>
+    </div>
+  );
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function AmountField({ label, icon, value, onChange, autoFocus, showCounter }: {
+  label: string; icon: React.ReactNode; value: string;
+  onChange: (v: string) => void; autoFocus?: boolean; showCounter?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
   return (
     <div>
       <label className="text-xs text-[var(--muted-foreground)] mb-1 flex items-center gap-1.5">
         {icon}{label}
+        {showCounter && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="ml-auto flex items-center gap-1 text-[var(--primary)] hover:opacity-70 transition-opacity"
+          >
+            <Calculator size={12} />
+            <span className="text-xs">Contar</span>
+          </button>
+        )}
       </label>
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] text-sm">$</span>
@@ -489,6 +596,12 @@ function AmountField({ label, icon, value, onChange, autoFocus }: {
           className="w-full pl-7 pr-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
         />
       </div>
+      {open && (
+        <ContadorEfectivo
+          onConfirm={(total) => onChange(total.toString())}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }
