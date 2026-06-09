@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, ShoppingCart, Banknote,
-  AlertTriangle, ArrowRight, Package, Target,
+  AlertTriangle, ArrowRight, Package, Target, Users, BarChart2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
@@ -163,6 +163,79 @@ function useRecentSales() {
   });
 }
 
+function useTopEmployees(periodStart: string) {
+  return useQuery({
+    queryKey: ["dashboard-top-employees", periodStart],
+    queryFn: async () => {
+      const supabase = createClient();
+      const today = todayLocal();
+      const { data, error } = await supabase
+        .from("sales")
+        .select("total, employee:employees(id, full_name)")
+        .eq("status", "completed")
+        .gte("created_at", `${periodStart}T00:00:00-07:00`)
+        .lte("created_at", `${today}T23:59:59-07:00`);
+      if (error) throw error;
+
+      const map = new Map<string, { name: string; total: number; count: number }>();
+      for (const sale of data ?? []) {
+        const emp  = (sale as any).employee;
+        const key  = emp?.id ?? "__none__";
+        const name = emp?.full_name ?? "Sin asignar";
+        const ex   = map.get(key);
+        if (ex) { ex.total += Number(sale.total); ex.count += 1; }
+        else map.set(key, { name, total: Number(sale.total), count: 1 });
+      }
+      return Array.from(map.values())
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5);
+    },
+    staleTime: 60_000,
+    enabled: !!periodStart,
+  });
+}
+
+function useMonthlyHistory() {
+  return useQuery({
+    queryKey: ["dashboard-monthly-history"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+      const from = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+        .toLocaleDateString("en-CA", { timeZone: TZ });
+
+      const { data, error } = await supabase
+        .from("sales")
+        .select("total, created_at")
+        .eq("status", "completed")
+        .gte("created_at", `${from}T00:00:00-07:00`);
+      if (error) throw error;
+
+      // Group by YYYY-MM
+      const map = new Map<string, { total: number; count: number }>();
+      for (const sale of data ?? []) {
+        const key = new Date(sale.created_at)
+          .toLocaleDateString("en-CA", { timeZone: TZ }).slice(0, 7);
+        const ex = map.get(key);
+        if (ex) { ex.total += Number(sale.total); ex.count += 1; }
+        else map.set(key, { total: Number(sale.total), count: 1 });
+      }
+
+      // Build last 12 months in chronological order
+      return Array.from({ length: 12 }, (_, i) => {
+        const d   = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+        const key = d.toLocaleDateString("en-CA", { timeZone: TZ }).slice(0, 7);
+        const lbl = d.toLocaleDateString("es-MX", { month: "short", timeZone: TZ });
+        const rec = map.get(key) ?? { total: 0, count: 0 };
+        const isCurrent =
+          d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        return { key, label: lbl, total: rec.total, count: rec.count, isCurrent };
+      });
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 function useDashboardRealtime() {
   const qc = useQueryClient();
   useEffect(() => {
@@ -173,6 +246,8 @@ function useDashboardRealtime() {
         qc.invalidateQueries({ queryKey: ["dashboard-stats"] });
         qc.invalidateQueries({ queryKey: ["dashboard-recent-sales"] });
         qc.invalidateQueries({ queryKey: ["dashboard-dow"] });
+        qc.invalidateQueries({ queryKey: ["dashboard-top-employees"] });
+        qc.invalidateQueries({ queryKey: ["dashboard-monthly-history"] });
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "product_variants" }, () => {
         qc.invalidateQueries({ queryKey: ["dashboard-low-stock"] });
@@ -191,11 +266,13 @@ export default function DashboardPage() {
   const { start: periodStart }     = getCurrentPeriod(cutDay);
   const { start: prevStart, end: prevEnd } = getPreviousPeriod(cutDay);
 
-  const { data: stats }            = useDashboardStats(periodStart);
-  const { data: lastPeriod = 0 }   = useLastPeriodStats(prevStart, prevEnd);
-  const { data: dow = [] }         = useDayOfWeekStats();
-  const { data: lowStock = [] }    = useLowStock();
-  const { data: recentSales = [] } = useRecentSales();
+  const { data: stats }              = useDashboardStats(periodStart);
+  const { data: lastPeriod = 0 }     = useLastPeriodStats(prevStart, prevEnd);
+  const { data: dow = [] }           = useDayOfWeekStats();
+  const { data: lowStock = [] }      = useLowStock();
+  const { data: recentSales = [] }   = useRecentSales();
+  const { data: topEmployees = [] }  = useTopEmployees(periodStart);
+  const { data: monthlyHistory = [] }= useMonthlyHistory();
 
   const monthlyGoal    = config?.monthly_goal ?? 0;
   const monthTotal     = stats?.month_total ?? 0;
@@ -316,22 +393,106 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Top employees ──────────────────────────────────────────────────── */}
+      {topEmployees.length > 0 && (
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={15} className="text-[var(--primary)]" />
+            <p className="text-sm font-semibold text-[var(--foreground)]">Top vendedores · período actual</p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {topEmployees.map((emp, i) => {
+              const maxEmp = topEmployees[0].total;
+              const pct    = maxEmp > 0 ? (emp.total / maxEmp) * 100 : 0;
+              const medals = ["🥇","🥈","🥉"];
+              return (
+                <div key={emp.name} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5 text-[var(--foreground)]">
+                      <span className="text-base leading-none">{medals[i] ?? `${i + 1}.`}</span>
+                      {emp.name}
+                    </span>
+                    <div className="text-right">
+                      <span className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(emp.total)}</span>
+                      <span className="text-xs text-[var(--muted-foreground)] ml-2">{emp.count} {emp.count === 1 ? "venta" : "ventas"}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--primary)] rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Monthly history ────────────────────────────────────────────────── */}
+      {monthlyHistory.some((m) => m.total > 0) && (
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart2 size={15} className="text-[var(--primary)]" />
+            <p className="text-sm font-semibold text-[var(--foreground)]">Ventas por mes (12 meses)</p>
+          </div>
+          <div className="flex items-end gap-1.5 h-28">
+            {(() => {
+              const maxM = Math.max(...monthlyHistory.map((m) => m.total), 1);
+              return monthlyHistory.map((m) => {
+                const h = (m.total / maxM) * 100;
+                return (
+                  <div key={m.key} className="flex-1 flex flex-col items-center gap-1 group relative">
+                    {/* Tooltip */}
+                    {m.total > 0 && (
+                      <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[var(--foreground)] text-[var(--background)] text-[10px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                        <p className="font-bold">{formatCurrency(m.total)}</p>
+                        <p className="opacity-70">{m.count} {m.count === 1 ? "venta" : "ventas"}</p>
+                      </div>
+                    )}
+                    <div className="w-full flex items-end justify-center" style={{ height: "88px" }}>
+                      <div
+                        className={`w-full rounded-t-sm transition-all duration-300 ${
+                          m.isCurrent ? "bg-[var(--primary)]" : "bg-[var(--primary)]/30 group-hover:bg-[var(--primary)]/50"
+                        }`}
+                        style={{ height: `${Math.max(h, m.total > 0 ? 3 : 0)}%` }}
+                      />
+                    </div>
+                    <span className={`text-[9px] font-medium capitalize ${m.isCurrent ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}>
+                      {m.label}
+                    </span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        </div>
+      )}
+
       {/* ── Day of week pattern ────────────────────────────────────────────── */}
       {dow.some((d) => d.avg > 0) && (
         <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
-          <p className="text-sm font-semibold text-[var(--foreground)] mb-4">Ventas promedio por día (90 días)</p>
-          <div className="flex items-end gap-2 h-24">
+          <p className="text-sm font-semibold text-[var(--foreground)] mb-4">Promedio por día de semana (90 días)</p>
+          <div className="flex items-end gap-2 h-28">
             {dow.map((d) => {
-              const height = maxDow > 0 ? (d.avg / maxDow) * 100 : 0;
-              const isToday = new Date().toLocaleDateString("en-CA", { timeZone: TZ }) &&
-                d.label === ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date().getDay()];
+              const height  = maxDow > 0 ? (d.avg / maxDow) * 100 : 0;
+              const isToday = d.label === ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"][new Date().getDay()];
               return (
-                <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full flex items-end justify-center" style={{ height: "80px" }}>
+                <div key={d.label} className="flex-1 flex flex-col items-center gap-1 group relative">
+                  {/* Tooltip */}
+                  {d.avg > 0 && (
+                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[var(--foreground)] text-[var(--background)] text-[10px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                      <p className="font-bold">{formatCurrency(d.avg)}</p>
+                      <p className="opacity-70">promedio</p>
+                    </div>
+                  )}
+                  <div className="w-full flex items-end justify-center" style={{ height: "88px" }}>
                     <div
-                      className={`w-full rounded-t-md transition-all ${isToday ? "bg-[var(--primary)]" : "bg-[var(--primary)]/30"}`}
+                      className={`w-full rounded-t-md transition-all ${
+                        isToday ? "bg-[var(--primary)]" : "bg-[var(--primary)]/30 group-hover:bg-[var(--primary)]/50"
+                      }`}
                       style={{ height: `${Math.max(height, d.avg > 0 ? 4 : 0)}%` }}
-                      title={formatCurrency(d.avg)}
                     />
                   </div>
                   <span className={`text-[10px] font-medium ${isToday ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]"}`}>
