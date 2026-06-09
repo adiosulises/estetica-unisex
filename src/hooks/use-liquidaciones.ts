@@ -22,6 +22,10 @@ export interface PendingItem {
   quantity: number;
   unit_price: number;
   brand_amount: number;
+  /** Only non-zero for floor brands: proportional IVA deduction for this item */
+  iva_portion: number;
+  /** Only non-zero for floor brands: proportional card commission deduction */
+  card_comm_portion: number;
 }
 
 export interface Payout {
@@ -42,7 +46,8 @@ export interface Payout {
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/** Brands with unpaid sale_items, sorted by pending amount */
+/** Brands with unpaid sale_items, sorted by pending amount.
+ *  Includes both % (consignment) and floor-rent brands. */
 export function usePendingByBrand() {
   return useQuery({
     queryKey: ["liquidaciones-pending"],
@@ -54,11 +59,11 @@ export function usePendingByBrand() {
         .select(`
           id,
           brand_amount,
-          store_amount,
+          unit_price,
+          quantity,
           brand:brands(id, name, contract_type, contract_value)
         `)
-        .not("brand_id", "is", null)
-        .gt("brand_amount", 0);
+        .not("brand_id", "is", null);
 
       if (error) throw error;
 
@@ -74,9 +79,19 @@ export function usePendingByBrand() {
         if (paidSet.has(item.id)) continue;
         const brand = item.brand as any;
         if (!brand) continue;
+
+        // Floor brands: store holds full sale amount, owes brand unit_price × qty
+        // Pct brands: owes brand the pre-calculated brand_amount
+        const isFloor = brand.contract_type === "floor";
+        const itemAmount = isFloor
+          ? Number(item.unit_price) * Number(item.quantity)
+          : Number(item.brand_amount);
+
+        if (itemAmount === 0) continue;
+
         const existing = map.get(brand.id);
         if (existing) {
-          existing.pending_amount += Number(item.brand_amount);
+          existing.pending_amount += itemAmount;
           existing.item_count += 1;
         } else {
           map.set(brand.id, {
@@ -84,7 +99,7 @@ export function usePendingByBrand() {
             brand_name: brand.name,
             contract_type: brand.contract_type,
             contract_value: Number(brand.contract_value),
-            pending_amount: Number(item.brand_amount),
+            pending_amount: itemAmount,
             item_count: 1,
           });
         }
@@ -96,8 +111,9 @@ export function usePendingByBrand() {
   });
 }
 
-/** Unpaid items for a specific brand */
-export function usePendingItems(brandId: string | null) {
+/** Unpaid items for a specific brand.
+ *  contractType is used to calculate brand_amount for floor brands. */
+export function usePendingItems(brandId: string | null, contractType?: string) {
   return useQuery({
     queryKey: ["liquidaciones-items", brandId],
     queryFn: async (): Promise<PendingItem[]> => {
@@ -118,26 +134,48 @@ export function usePendingItems(brandId: string | null) {
           unit_price,
           brand_amount,
           variant:product_variants(sku, product:products(name)),
-          sale:sales(folio, created_at)
+          sale:sales(folio, created_at, total, paid_card, iva_collected)
         `)
         .eq("brand_id", brandId)
-        .gt("brand_amount", 0)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
+      const isFloor = contractType === "floor";
+
       return (data ?? [])
-        .filter((item: any) => !paidSet.has(item.id))
-        .map((item: any) => ({
-          sale_item_id: item.id,
-          sale_folio: item.sale?.folio ?? "—",
-          sale_date: item.sale?.created_at ?? "",
-          product_name: item.variant?.product?.name ?? "—",
-          variant_sku: item.variant?.sku ?? "—",
-          quantity: item.quantity,
-          unit_price: Number(item.unit_price),
-          brand_amount: Number(item.brand_amount),
-        }));
+        .filter((item: any) => {
+          if (paidSet.has(item.id)) return false;
+          const amount = isFloor
+            ? Number(item.unit_price) * Number(item.quantity)
+            : Number(item.brand_amount);
+          return amount > 0;
+        })
+        .map((item: any) => {
+          const gross = Number(item.unit_price) * Number(item.quantity);
+          const saleTotal = Number(item.sale?.total ?? 1);
+          const ratio = saleTotal > 0 ? gross / saleTotal : 0;
+
+          // Proportional IVA and card commission for this item within its sale
+          const ivaCollected  = Number(item.sale?.iva_collected ?? 0);
+          const paidCard      = Number(item.sale?.paid_card ?? 0);
+          const ivaPortion    = isFloor ? ivaCollected * ratio : 0;
+          const cardCommPortion = isFloor ? paidCard * 0.046 * ratio : 0;
+
+          return {
+            sale_item_id: item.id,
+            sale_folio: item.sale?.folio ?? "—",
+            sale_date: item.sale?.created_at ?? "",
+            product_name: item.variant?.product?.name ?? "—",
+            variant_sku: item.variant?.sku ?? "—",
+            quantity: Number(item.quantity),
+            unit_price: Number(item.unit_price),
+            // For floor brands: gross. For pct brands: pre-calculated brand_amount.
+            brand_amount: isFloor ? gross : Number(item.brand_amount),
+            iva_portion: ivaPortion,
+            card_comm_portion: cardCommPortion,
+          };
+        });
     },
     enabled: !!brandId,
     staleTime: 30_000,

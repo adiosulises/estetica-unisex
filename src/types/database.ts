@@ -700,6 +700,7 @@ export type Database = {
           iva_rate: number
           maintenance_pct: number
           monthly_goal: number
+          period_cut_day: number
           rent_amount: number
           salary_pool_pct: number
           savings_pct: number
@@ -715,6 +716,7 @@ export type Database = {
           iva_rate?: number
           maintenance_pct?: number
           monthly_goal?: number
+          period_cut_day?: number
           rent_amount?: number
           salary_pool_pct?: number
           savings_pct?: number
@@ -730,6 +732,7 @@ export type Database = {
           iva_rate?: number
           maintenance_pct?: number
           monthly_goal?: number
+          period_cut_day?: number
           rent_amount?: number
           salary_pool_pct?: number
           savings_pct?: number

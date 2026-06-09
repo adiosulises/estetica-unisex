@@ -60,6 +60,7 @@ export default function ConfiguracionPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ivaIncludesTransfer, setIvaIncludesTransfer] = useState(false);
+  const [periodCutDay, setPeriodCutDay] = useState("0");
 
   useEffect(() => {
     if (!config) return;
@@ -71,6 +72,7 @@ export default function ConfiguracionPage() {
     setAds(String(Math.round(config.ads_pct * 100)));
     setConstruction(String(Math.round(config.construction_pct * 100)));
     setIvaIncludesTransfer(config.iva_includes_transfer ?? false);
+    setPeriodCutDay(String(config.period_cut_day ?? 0));
   }, [config]);
 
   const totalPct = [salary, maintenance, savings, ads, construction]
@@ -79,6 +81,8 @@ export default function ConfiguracionPage() {
   async function handleSave() {
     setError(null);
     if (totalPct > 100) { setError("Los porcentajes suman más de 100%"); return; }
+    const cutDay = parseInt(periodCutDay) || 0;
+    if (cutDay < 0 || cutDay > 31) { setError("Día de corte debe ser 0 (fin de mes) o entre 1 y 31"); return; }
     try {
       await update.mutateAsync({
         rent_amount:           parseFloat(rent) || 0,
@@ -89,6 +93,7 @@ export default function ConfiguracionPage() {
         ads_pct:               (parseFloat(ads) || 0) / 100,
         construction_pct:      (parseFloat(construction) || 0) / 100,
         iva_includes_transfer: ivaIncludesTransfer,
+        period_cut_day:        cutDay,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -123,6 +128,32 @@ export default function ConfiguracionPage() {
           <p className="text-sm text-[var(--muted-foreground)]">Variables que rigen el sistema</p>
         </div>
       </div>
+
+      {/* Período de corte */}
+      <Section title="Período de ventas">
+        <div>
+          <label className="text-xs text-[var(--muted-foreground)] mb-1.5 block">
+            Día de corte del período
+          </label>
+          <select
+            value={periodCutDay}
+            onChange={(e) => setPeriodCutDay(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--background)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+          >
+            <option value="0">Fin de mes (día 1 al último día)</option>
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                Día {d} (período del {d + 1} al {d} del mes siguiente)
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-[var(--muted-foreground)] mt-1.5">
+            {parseInt(periodCutDay) === 0
+              ? "El dashboard muestra ventas del 1° al último día del mes."
+              : `El dashboard muestra ventas del día ${parseInt(periodCutDay) + 1} de un mes al día ${periodCutDay} del siguiente.`}
+          </p>
+        </div>
+      </Section>
 
       {/* Fixed expenses */}
       <Section title="Gastos fijos">

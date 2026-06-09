@@ -15,6 +15,8 @@ export interface Config {
   savings_pct: number;
   ads_pct: number;
   construction_pct: number;
+  /** 0 = fin de mes calendario. 1–31 = el período cierra ese día de cada mes. */
+  period_cut_day: number;
 }
 
 export function useConfig() {

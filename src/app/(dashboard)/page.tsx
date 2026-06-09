@@ -10,34 +10,21 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
 import { useConfig } from "@/hooks/use-configuracion";
+import { getCurrentPeriod, getPreviousPeriod, daysRemainingInPeriod } from "@/lib/period";
 
 const TZ = "America/Hermosillo";
 
 function todayLocal() {
   return new Date().toLocaleDateString("en-CA", { timeZone: TZ });
 }
-function monthStart() {
-  const d = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-function daysRemainingInMonth(): number {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return last - now.getDate() + 1; // includes today
-}
-function daysInCurrentMonth(): number {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
-  return new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-}
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
-function useDashboardStats() {
+function useDashboardStats(periodStart: string) {
   return useQuery({
-    queryKey: ["dashboard-stats", todayLocal()],
+    queryKey: ["dashboard-stats", todayLocal(), periodStart],
     queryFn: async () => {
       const supabase = createClient();
       const today = todayLocal();
-      const month = monthStart();
 
       const [todayRes, monthRes, pendingRes, paidRes] = await Promise.all([
         supabase
@@ -50,7 +37,7 @@ function useDashboardStats() {
           .from("sales")
           .select("total, sale_items(store_amount)")
           .eq("status", "completed")
-          .gte("created_at", `${month}T00:00:00-07:00`),
+          .gte("created_at", `${periodStart}T00:00:00-07:00`),
         supabase
           .from("sale_items")
           .select("id, brand_amount")
@@ -61,49 +48,44 @@ function useDashboardStats() {
           .select("sale_item_id"),
       ]);
 
-      const paidSet   = new Set((paidRes.data ?? []).map((p: any) => p.sale_item_id));
+      const paidSet    = new Set((paidRes.data ?? []).map((p: any) => p.sale_item_id));
       const todaySales = todayRes.data ?? [];
       const monthSales = monthRes.data ?? [];
       const unpaid     = (pendingRes.data ?? []).filter((i: any) => !paidSet.has(i.id));
 
       return {
-        today_total:    todaySales.reduce((s, r) => s + Number(r.total), 0),
-        today_count:    todaySales.length,
-        today_cash:     todaySales.reduce((s, r) => s + Number(r.paid_cash), 0),
-        today_card:     todaySales.reduce((s, r) => s + Number(r.paid_card), 0),
-        today_transfer: todaySales.reduce((s, r) => s + Number(r.paid_transfer), 0),
-        month_total:    monthSales.reduce((s, r) => s + Number(r.total), 0),
+        today_total:     todaySales.reduce((s, r) => s + Number(r.total), 0),
+        today_count:     todaySales.length,
+        today_cash:      todaySales.reduce((s, r) => s + Number(r.paid_cash), 0),
+        today_card:      todaySales.reduce((s, r) => s + Number(r.paid_card), 0),
+        today_transfer:  todaySales.reduce((s, r) => s + Number(r.paid_transfer), 0),
+        month_total:     monthSales.reduce((s, r) => s + Number(r.total), 0),
         month_store_net: monthSales.reduce((s, r) => s + (r.sale_items ?? []).reduce((si: number, item: any) => si + Number(item.store_amount ?? 0), 0), 0),
-        month_count:    monthSales.length,
-        pending_brands: unpaid.reduce((s: number, r: any) => s + Number(r.brand_amount), 0),
+        month_count:     monthSales.length,
+        pending_brands:  unpaid.reduce((s: number, r: any) => s + Number(r.brand_amount), 0),
       };
     },
     staleTime: 60_000,
+    enabled: !!periodStart,
   });
 }
 
-function useLastMonthStats() {
+function useLastPeriodStats(prevStart: string, prevEnd: string) {
   return useQuery({
-    queryKey: ["dashboard-last-month"],
+    queryKey: ["dashboard-last-period", prevStart, prevEnd],
     queryFn: async () => {
       const supabase = createClient();
-      const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
-      const year  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
-      const month = now.getMonth() === 0 ? 12 : now.getMonth(); // 1-based
-      const from  = `${year}-${String(month).padStart(2, "0")}-01`;
-      const days  = new Date(year, month, 0).getDate();
-      const to    = `${year}-${String(month).padStart(2, "0")}-${days}`;
-
       const { data, error } = await supabase
         .from("sales")
         .select("total")
         .eq("status", "completed")
-        .gte("created_at", `${from}T00:00:00-07:00`)
-        .lte("created_at", `${to}T23:59:59-07:00`);
+        .gte("created_at", `${prevStart}T00:00:00-07:00`)
+        .lte("created_at", `${prevEnd}T23:59:59-07:00`);
       if (error) throw error;
       return (data ?? []).reduce((s, r) => s + Number(r.total), 0);
     },
     staleTime: 5 * 60_000,
+    enabled: !!prevStart && !!prevEnd,
   });
 }
 
@@ -203,23 +185,28 @@ function useDashboardRealtime() {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   useDashboardRealtime();
-  const { data: stats }           = useDashboardStats();
-  const { data: lastMonth = 0 }   = useLastMonthStats();
-  const { data: dow = [] }        = useDayOfWeekStats();
-  const { data: lowStock = [] }   = useLowStock();
+  const { data: config }           = useConfig();
+
+  const cutDay                     = config?.period_cut_day ?? 0;
+  const { start: periodStart }     = getCurrentPeriod(cutDay);
+  const { start: prevStart, end: prevEnd } = getPreviousPeriod(cutDay);
+
+  const { data: stats }            = useDashboardStats(periodStart);
+  const { data: lastPeriod = 0 }   = useLastPeriodStats(prevStart, prevEnd);
+  const { data: dow = [] }         = useDayOfWeekStats();
+  const { data: lowStock = [] }    = useLowStock();
   const { data: recentSales = [] } = useRecentSales();
-  const { data: config }          = useConfig();
 
   const monthlyGoal    = config?.monthly_goal ?? 0;
   const monthTotal     = stats?.month_total ?? 0;
   const monthStoreNet  = stats?.month_store_net ?? 0;
   const goalPct        = monthlyGoal > 0 ? Math.min(100, (monthStoreNet / monthlyGoal) * 100) : 0;
   const remaining      = Math.max(0, monthlyGoal - monthStoreNet);
-  const daysLeft       = daysRemainingInMonth();
+  const daysLeft       = daysRemainingInPeriod(cutDay);
   const dailyTarget    = daysLeft > 0 ? remaining / daysLeft : 0;
 
-  const monthChange   = lastMonth > 0
-    ? ((monthTotal - lastMonth) / lastMonth) * 100
+  const monthChange    = lastPeriod > 0
+    ? ((monthTotal - lastPeriod) / lastPeriod) * 100
     : null;
 
   const maxDow = Math.max(...dow.map((d) => d.avg), 1);
@@ -252,7 +239,7 @@ export default function DashboardPage() {
           icon={<TrendingUp size={18} />}
           color="green"
           badge={monthChange !== null
-            ? { label: `${monthChange >= 0 ? "+" : ""}${monthChange.toFixed(0)}% vs mes ant.`, positive: monthChange >= 0 }
+            ? { label: `${monthChange >= 0 ? "+" : ""}${monthChange.toFixed(0)}% vs período ant.`, positive: monthChange >= 0 }
             : undefined}
         />
         <StatCard

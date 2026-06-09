@@ -732,7 +732,7 @@ function BrandCard({
   onToggle: () => void;
   onToggleHistory: () => void;
 }) {
-  const { data: items = [], isLoading } = usePendingItems(isExpanded ? brand.brand_id : null);
+  const { data: items = [], isLoading } = usePendingItems(isExpanded ? brand.brand_id : null, brand.contract_type);
   const { data: history = [] } = useBrandPayouts(showingHistory ? brand.brand_id : null);
   const [showPay, setShowPay] = useState(false);
 
@@ -748,7 +748,7 @@ function BrandCard({
             {brand.item_count} {brand.item_count === 1 ? "artículo vendido" : "artículos vendidos"} ·{" "}
             {brand.contract_type === "pct"
               ? `consigna ${(brand.contract_value * 100).toFixed(0)}%`
-              : `renta fija ${formatCurrency(brand.contract_value)}`}
+              : `piso · ventas brutas menos IVA/tarjeta`}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -867,12 +867,23 @@ function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: 
   const [notes, setNotes]   = useState("");
   const [error, setError]   = useState<string | null>(null);
   const createPayout = useCreatePayout();
-  const total = items.reduce((s, i) => s + i.brand_amount, 0);
+
+  const isFloor   = brand.contract_type === "floor";
+  const gross     = items.reduce((s, i) => s + i.brand_amount, 0);
+  const ivaTotal  = items.reduce((s, i) => s + i.iva_portion, 0);
+  const cardTotal = items.reduce((s, i) => s + i.card_comm_portion, 0);
+  const netAmount = gross - ivaTotal - cardTotal;
+  const total     = isFloor ? netAmount : gross;
+
+  // For floor brands we pay net, so override brand_amount per item proportionally
+  const adjustedItems = isFloor && gross > 0
+    ? items.map((i) => ({ ...i, brand_amount: i.brand_amount - i.iva_portion - i.card_comm_portion }))
+    : items;
 
   async function handlePay() {
     setError(null);
     try {
-      await createPayout.mutateAsync({ brand_id: brand.brand_id, items, payment_method: method, notes: notes || undefined });
+      await createPayout.mutateAsync({ brand_id: brand.brand_id, items: adjustedItems, payment_method: method, notes: notes || undefined });
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -891,6 +902,26 @@ function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: 
           <div className="flex justify-between text-[var(--muted-foreground)]">
             <span>{items.length} {items.length === 1 ? "artículo" : "artículos"}</span>
           </div>
+          {isFloor ? (
+            <>
+              <div className="flex justify-between text-[var(--muted-foreground)]">
+                <span>Ventas brutas</span>
+                <span className="font-mono">{formatCurrency(gross)}</span>
+              </div>
+              {ivaTotal > 0 && (
+                <div className="flex justify-between text-red-500">
+                  <span>IVA</span>
+                  <span className="font-mono">−{formatCurrency(ivaTotal)}</span>
+                </div>
+              )}
+              {cardTotal > 0 && (
+                <div className="flex justify-between text-red-500">
+                  <span>Comisión tarjeta (4.6%)</span>
+                  <span className="font-mono">−{formatCurrency(cardTotal)}</span>
+                </div>
+              )}
+            </>
+          ) : null}
           <div className="flex justify-between font-bold text-[var(--foreground)] pt-1 border-t border-[var(--border)]">
             <span>Total a pagar</span>
             <span className="font-mono">{formatCurrency(total)}</span>
