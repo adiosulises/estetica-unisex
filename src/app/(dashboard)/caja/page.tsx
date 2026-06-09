@@ -473,24 +473,38 @@ function MovimientosCard({
 }
 
 // ── Contador de efectivo ──────────────────────────────────────────────────────
-const BILLETES = [1000, 500, 200, 100, 50, 20];
-const MONEDAS  = [20, 10, 5, 2, 1];
+const BILLETES: { key: string; value: number }[] = [
+  { key: "b-1000", value: 1000 },
+  { key: "b-500",  value: 500  },
+  { key: "b-200",  value: 200  },
+  { key: "b-100",  value: 100  },
+  { key: "b-50",   value: 50   },
+  { key: "b-20",   value: 20   },
+];
+const MONEDAS: { key: string; value: number }[] = [
+  { key: "m-20", value: 20 },
+  { key: "m-10", value: 10 },
+  { key: "m-5",  value: 5  },
+  { key: "m-2",  value: 2  },
+  { key: "m-1",  value: 1  },
+];
+const ALL_DENOMS = [...BILLETES, ...MONEDAS];
 
 function ContadorEfectivo({ onConfirm, onClose }: {
   onConfirm: (total: number) => void;
   onClose: () => void;
 }) {
-  const initialCounts = () =>
-    Object.fromEntries([...BILLETES, ...MONEDAS].map((d) => [d, ""]));
-  const [counts, setCounts] = useState<Record<number, string>>(initialCounts);
+  const [counts, setCounts] = useState<Record<string, string>>(
+    () => Object.fromEntries(ALL_DENOMS.map((d) => [d.key, ""]))
+  );
 
-  const total = [...BILLETES, ...MONEDAS].reduce((sum, d) => {
-    const n = parseFloat(counts[d]);
-    return sum + (isNaN(n) ? 0 : n * d);
+  const total = ALL_DENOMS.reduce((sum, d) => {
+    const n = parseFloat(counts[d.key]);
+    return sum + (isNaN(n) ? 0 : n * d.value);
   }, 0);
 
-  function set(denom: number, val: string) {
-    setCounts((prev) => ({ ...prev, [denom]: val }));
+  function set(key: string, val: string) {
+    setCounts((prev) => ({ ...prev, [key]: val }));
   }
 
   return (
@@ -513,7 +527,7 @@ function ContadorEfectivo({ onConfirm, onClose }: {
             <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Billetes</p>
             <div className="flex flex-col gap-1.5">
               {BILLETES.map((d) => (
-                <DenomRow key={d} denom={d} value={counts[d]} onChange={(v) => set(d, v)} />
+                <DenomRow key={d.key} denom={d.value} value={counts[d.key]} onChange={(v) => set(d.key, v)} />
               ))}
             </div>
           </div>
@@ -523,7 +537,7 @@ function ContadorEfectivo({ onConfirm, onClose }: {
             <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Monedas</p>
             <div className="flex flex-col gap-1.5">
               {MONEDAS.map((d) => (
-                <DenomRow key={d} denom={d} value={counts[d]} onChange={(v) => set(d, v)} />
+                <DenomRow key={d.key} denom={d.value} value={counts[d.key]} onChange={(v) => set(d.key, v)} />
               ))}
             </div>
           </div>
