@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -163,18 +163,17 @@ function useRecentSales() {
   });
 }
 
-function useTopEmployees(periodStart: string) {
+function useTopEmployees(start: string, end: string) {
   return useQuery({
-    queryKey: ["dashboard-top-employees", periodStart],
+    queryKey: ["dashboard-top-employees", start, end],
     queryFn: async () => {
       const supabase = createClient();
-      const today = todayLocal();
       const { data, error } = await supabase
         .from("sales")
         .select("total, employee:employees(id, full_name)")
         .eq("status", "completed")
-        .gte("created_at", `${periodStart}T00:00:00-07:00`)
-        .lte("created_at", `${today}T23:59:59-07:00`);
+        .gte("created_at", `${start}T00:00:00-07:00`)
+        .lte("created_at", `${end}T23:59:59-07:00`);
       if (error) throw error;
 
       const map = new Map<string, { name: string; total: number; count: number }>();
@@ -191,7 +190,7 @@ function useTopEmployees(periodStart: string) {
         .slice(0, 5);
     },
     staleTime: 60_000,
-    enabled: !!periodStart,
+    enabled: !!start && !!end,
   });
 }
 
@@ -271,8 +270,23 @@ export default function DashboardPage() {
   const { data: dow = [] }           = useDayOfWeekStats();
   const { data: lowStock = [] }      = useLowStock();
   const { data: recentSales = [] }   = useRecentSales();
-  const { data: topEmployees = [] }  = useTopEmployees(periodStart);
   const { data: monthlyHistory = [] }= useMonthlyHistory();
+
+  // Top employees: independent month navigation (calendar months)
+  const [empMonthOffset, setEmpMonthOffset] = useState(0); // 0 = current period
+  const empPeriod = (() => {
+    if (empMonthOffset === 0) return { start: periodStart, end: todayLocal(), label: "Período actual" };
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+    const d   = new Date(now.getFullYear(), now.getMonth() + empMonthOffset, 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const label = d.toLocaleDateString("es-MX", { month: "long", year: "numeric", timeZone: TZ });
+    return {
+      start: d.toLocaleDateString("en-CA", { timeZone: TZ }),
+      end:   end.toLocaleDateString("en-CA", { timeZone: TZ }),
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+    };
+  })();
+  const { data: topEmployees = [] } = useTopEmployees(empPeriod.start, empPeriod.end);
 
   const monthlyGoal    = config?.monthly_goal ?? 0;
   const monthTotal     = stats?.month_total ?? 0;
@@ -394,12 +408,30 @@ export default function DashboardPage() {
       )}
 
       {/* ── Top employees ──────────────────────────────────────────────────── */}
-      {topEmployees.length > 0 && (
-        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
-          <div className="flex items-center gap-2 mb-4">
+      <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
             <Users size={15} className="text-[var(--primary)]" />
-            <p className="text-sm font-semibold text-[var(--foreground)]">Top vendedores · período actual</p>
+            <p className="text-sm font-semibold text-[var(--foreground)]">Top vendedores</p>
           </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setEmpMonthOffset((o) => o - 1)}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs"
+            >‹</button>
+            <span className="text-xs text-[var(--muted-foreground)] min-w-24 text-center capitalize">
+              {empPeriod.label}
+            </span>
+            <button
+              onClick={() => setEmpMonthOffset((o) => o + 1)}
+              disabled={empMonthOffset >= 0}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs disabled:opacity-30"
+            >›</button>
+          </div>
+        </div>
+        {topEmployees.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)] text-center py-4">Sin ventas en este período</p>
+        ) : (
           <div className="flex flex-col gap-3">
             {topEmployees.map((emp, i) => {
               const maxEmp = topEmployees[0].total;
@@ -427,8 +459,8 @@ export default function DashboardPage() {
               );
             })}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── Monthly history ────────────────────────────────────────────────── */}
       {monthlyHistory.some((m) => m.total > 0) && (

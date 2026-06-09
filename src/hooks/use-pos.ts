@@ -144,7 +144,20 @@ export function useCreateSale() {
         p_notes: payload.notes ?? undefined,
       });
       if (error) throw error;
-      return data as unknown as SaleResult;
+
+      const result = data as unknown as SaleResult;
+
+      // Tag the sale with the employee who made it.
+      // employees.id === auth.uid() by design in this system.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id && result.sale_id) {
+        await supabase
+          .from("sales")
+          .update({ employee_id: user.id })
+          .eq("id", result.sale_id);
+      }
+
+      return result;
     },
     onSuccess: () => {
       // Invalidar inventario para reflejar el stock descontado
