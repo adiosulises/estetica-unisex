@@ -17,6 +17,7 @@ export interface PendingItem {
   sale_item_id: string;
   sale_folio: string;
   sale_date: string;
+  sale_payment_method: string;
   product_name: string;
   variant_sku: string;
   quantity: number;
@@ -134,7 +135,7 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
           unit_price,
           brand_amount,
           variant:product_variants(sku, product:products(name)),
-          sale:sales(folio, created_at, total, paid_card, iva_collected)
+          sale:sales(folio, created_at, total, paid_card, iva_collected, payment_method)
         `)
         .eq("brand_id", brandId)
         .order("created_at", { ascending: false });
@@ -159,13 +160,15 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
           // Proportional IVA and card commission for this item within its sale
           const ivaCollected  = Number(item.sale?.iva_collected ?? 0);
           const paidCard      = Number(item.sale?.paid_card ?? 0);
-          const ivaPortion    = isFloor ? ivaCollected * ratio : 0;
-          const cardCommPortion = isFloor ? paidCard * 0.046 * ratio : 0;
+          const ivaPortion      = isFloor ? ivaCollected * ratio : 0;
+          // Card commission shown for all brands (informational for pct, deducted for floor)
+          const cardCommPortion = paidCard > 0 ? paidCard * 0.046 * ratio : 0;
 
           return {
             sale_item_id: item.id,
             sale_folio: item.sale?.folio ?? "—",
             sale_date: item.sale?.created_at ?? "",
+            sale_payment_method: item.sale?.payment_method ?? "cash",
             product_name: item.variant?.product?.name ?? "—",
             variant_sku: item.variant?.sku ?? "—",
             quantity: Number(item.quantity),

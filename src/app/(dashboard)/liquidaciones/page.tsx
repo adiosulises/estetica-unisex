@@ -4,8 +4,9 @@ import { useState } from "react";
 import {
   Banknote, CreditCard, ArrowLeftRight, ChevronDown, ChevronUp,
   CheckCircle2, Loader2, History, RefreshCw, Store,
-  Users, Receipt,
+  Users, Receipt, FileDown,
 } from "lucide-react";
+import jsPDF from "jspdf";
 import {
   usePendingByBrand, usePendingItems, useBrandPayouts, useCreatePayout,
   type BrandPending, type PendingItem,
@@ -735,6 +736,27 @@ function BrandCard({
   const { data: items = [], isLoading } = usePendingItems(isExpanded ? brand.brand_id : null, brand.contract_type);
   const { data: history = [] } = useBrandPayouts(showingHistory ? brand.brand_id : null);
   const [showPay, setShowPay] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Sync selection when items load (select all by default)
+  const prevItemIds = items.map((i) => i.sale_item_id).join(",");
+  const [lastIds, setLastIds] = useState("");
+  if (prevItemIds !== lastIds) {
+    setLastIds(prevItemIds);
+    setSelected(new Set(items.map((i) => i.sale_item_id)));
+  }
+
+  const allChecked = items.length > 0 && selected.size === items.length;
+  const toggleAll = () =>
+    setSelected(allChecked ? new Set() : new Set(items.map((i) => i.sale_item_id)));
+  const toggleOne = (id: string) => {
+    const next = new Set(selected);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setSelected(next);
+  };
+
+  const selectedItems = items.filter((i) => selected.has(i.sale_item_id));
+  const selectedTotal = selectedItems.reduce((s, i) => s + i.brand_amount, 0);
 
   return (
     <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
@@ -774,20 +796,40 @@ function BrandCard({
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-[var(--muted)] text-[var(--muted-foreground)]">
-                      <th className="text-left px-5 py-2 font-medium">Folio</th>
+                      <th className="px-4 py-2">
+                        <input
+                          type="checkbox"
+                          checked={allChecked}
+                          onChange={toggleAll}
+                          className="rounded"
+                        />
+                      </th>
+                      <th className="text-left px-2 py-2 font-medium">Folio</th>
                       <th className="text-left px-3 py-2 font-medium">Producto</th>
                       <th className="text-right px-3 py-2 font-medium">Cant.</th>
-                      <th className="text-right px-5 py-2 font-medium">Monto marca</th>
+                      <th className="text-right px-4 py-2 font-medium">Monto marca</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {items.map((item) => <ItemRow key={item.sale_item_id} item={item} />)}
+                    {items.map((item) => (
+                      <ItemRow
+                        key={item.sale_item_id}
+                        item={item}
+                        checked={selected.has(item.sale_item_id)}
+                        onToggle={() => toggleOne(item.sale_item_id)}
+                      />
+                    ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-[var(--border)]">
-                      <td colSpan={3} className="px-5 py-3 text-sm font-semibold text-[var(--foreground)]">Total</td>
-                      <td className="px-5 py-3 text-right text-sm font-bold font-mono text-amber-600">
-                        {formatCurrency(brand.pending_amount)}
+                      <td />
+                      <td colSpan={3} className="px-2 py-3 text-sm font-semibold text-[var(--foreground)]">
+                        {selected.size < items.length
+                          ? `${selected.size} de ${items.length} seleccionados`
+                          : "Total"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-bold font-mono text-amber-600">
+                        {formatCurrency(selectedTotal)}
                       </td>
                     </tr>
                   </tfoot>
@@ -802,7 +844,11 @@ function BrandCard({
                   {showingHistory ? "Ocultar historial" : "Ver historial"}
                 </button>
                 <div className="flex-1" />
-                <Button size="sm" onClick={() => setShowPay(true)}>Registrar pago</Button>
+                <Button size="sm" disabled={selected.size === 0} onClick={() => setShowPay(true)}>
+                  {selected.size < items.length && selected.size > 0
+                    ? `Pagar ${selected.size} artículo${selected.size > 1 ? "s" : ""}`
+                    : "Registrar pago"}
+                </Button>
               </div>
               {showingHistory && history.length > 0 && (
                 <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-2">
@@ -833,7 +879,11 @@ function BrandCard({
                 </div>
               )}
               {showPay && (
-                <BrandPayModal brand={brand} items={items} onClose={() => setShowPay(false)} />
+                <BrandPayModal
+                  brand={brand}
+                  items={selectedItems}
+                  onClose={() => setShowPay(false)}
+                />
               )}
             </>
           )}
@@ -843,24 +893,247 @@ function BrandCard({
   );
 }
 
-function ItemRow({ item }: { item: PendingItem }) {
+function ItemRow({
+  item,
+  checked,
+  onToggle,
+}: {
+  item: PendingItem;
+  checked: boolean;
+  onToggle: () => void;
+}) {
   const date = item.sale_date
     ? new Date(item.sale_date).toLocaleDateString("es-MX", { dateStyle: "short", timeZone: "America/Hermosillo" })
     : "—";
   return (
-    <tr className="hover:bg-[var(--muted)]/20">
-      <td className="px-5 py-2 font-mono text-[var(--muted-foreground)]">{item.sale_folio}</td>
+    <tr
+      className={`hover:bg-[var(--muted)]/20 cursor-pointer ${!checked ? "opacity-50" : ""}`}
+      onClick={onToggle}
+    >
+      <td className="px-4 py-2 text-center" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={checked} onChange={onToggle} className="rounded" />
+      </td>
+      <td className="px-2 py-2 font-mono text-[var(--muted-foreground)]">{item.sale_folio}</td>
       <td className="px-3 py-2">
         <p className="text-[var(--foreground)]">{item.product_name}</p>
         <p className="text-[var(--muted-foreground)]">{item.variant_sku} · {date}</p>
       </td>
       <td className="px-3 py-2 text-right text-[var(--foreground)]">{item.quantity}</td>
-      <td className="px-5 py-2 text-right font-mono font-medium text-[var(--foreground)]">
+      <td className="px-4 py-2 text-right font-mono font-medium text-[var(--foreground)]">
         {formatCurrency(item.brand_amount)}
       </td>
     </tr>
   );
 }
+
+// ─── PDF generator ────────────────────────────────────────────────────────────
+
+function generatePayoutPDF({
+  brand,
+  items,
+  method,
+  notes,
+  isFloor,
+  gross,
+  ivaTotal,
+  cardTotal,
+  total,
+}: {
+  brand: BrandPending;
+  items: PendingItem[];
+  method: string;
+  notes: string;
+  isFloor: boolean;
+  gross: number;
+  ivaTotal: number;
+  cardTotal: number;
+  total: number;
+}) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = 210;
+  const ML = 18;           // left margin
+  const MR = 18;           // right margin
+  const RIGHT = W - MR;   // right edge
+  const colW = W - ML - MR;
+  let y = 22;
+
+  const fmt = (n: number) =>
+    n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = today.getFullYear();
+
+  // ── Header ──────────────────────────────────────────────────────────────────
+  doc.setFont("courier", "bold");
+  doc.setFontSize(14);
+  doc.text(`REPORTE DE VENTAS ${brand.brand_name.toUpperCase()}`, ML, y);
+  y += 9;
+
+  doc.setFontSize(9.5);
+  doc.setTextColor(80, 80, 80);
+  doc.text(`${dd}/${mm}/${yyyy}`, ML, y);
+  y += 5;
+  doc.text(
+    `Contrato: ${isFloor ? "Piso" : `${(brand.contract_value * 100).toFixed(0)}%`}`,
+    ML, y
+  );
+  y += 5;
+  doc.text(`Método de pago: ${pmLabel(method)}`, ML, y);
+  if (notes) {
+    y += 5;
+    const noteLines = doc.splitTextToSize(`Notas: ${notes}`, colW);
+    doc.text(noteLines, ML, y);
+    y += noteLines.length * 4.5;
+  }
+  y += 4;
+  doc.setTextColor(0, 0, 0);
+
+  // thin separator
+  doc.setDrawColor(160, 160, 160);
+  doc.line(ML, y, RIGHT, y);
+  y += 5;
+
+  // ── Column definitions ───────────────────────────────────────────────────────
+  // Columns differ by contract type to avoid overcrowding
+  // All x values are absolute positions on the page
+
+  // All brands show card commission. Floor brands also show IVA.
+  // Columns: Producto/SKU | Cant | Fecha | P.Público | Método | Com.Tarjeta | [IVA] | Monto marca
+  const COL = isFloor
+    ? {
+        prod:    { x: ML,       w: 42, align: "left"  as const },
+        qty:     { x: ML + 44,  w: 10, align: "right" as const },
+        date:    { x: ML + 56,  w: 18, align: "left"  as const },
+        price:   { x: ML + 94,  w: 20, align: "right" as const },
+        pmethod: { x: ML + 96,  w: 20, align: "left"  as const },
+        cardcom: { x: ML + 138, w: 18, align: "right" as const },
+        iva:     { x: ML + 158, w: 16, align: "right" as const },
+        amount:  { x: RIGHT,    w: 0,  align: "right" as const },
+      }
+    : {
+        prod:    { x: ML,       w: 48, align: "left"  as const },
+        qty:     { x: ML + 50,  w: 10, align: "right" as const },
+        date:    { x: ML + 62,  w: 18, align: "left"  as const },
+        price:   { x: ML + 100, w: 22, align: "right" as const },
+        pmethod: { x: ML + 103, w: 22, align: "left"  as const },
+        cardcom: { x: ML + 152, w: 20, align: "right" as const },
+        iva:     { x: 0,        w: 0,  align: "right" as const },
+        amount:  { x: RIGHT,    w: 0,  align: "right" as const },
+      };
+
+  const cell = (text: string, col: { x: number; w: number; align: "left" | "right" }, cy: number) => {
+    if (col.x === 0) return;
+    doc.text(text, col.align === "right" ? col.x : col.x + 1, cy, { align: col.align });
+  };
+
+  // ── Table header ─────────────────────────────────────────────────────────────
+  doc.setFontSize(7.5);
+  doc.setFont("courier", "bold");
+  doc.setFillColor(240, 240, 240);
+  doc.rect(ML, y, colW, 6.5, "F");
+  const hy = y + 4.5;
+  cell("PRODUCTO / SKU",  COL.prod,    hy);
+  cell("CANT",            COL.qty,     hy);
+  cell("FECHA",           COL.date,    hy);
+  cell("P. PUBLICO",      COL.price,   hy);
+  cell("METODO PAGO",     COL.pmethod, hy);
+  cell("COM. TARJETA",    COL.cardcom, hy);
+  if (isFloor) cell("IVA", COL.iva,   hy);
+  cell("MONTO MARCA",     COL.amount,  hy);
+  y += 7.5;
+
+  // ── Table rows ───────────────────────────────────────────────────────────────
+  doc.setFont("courier", "normal");
+  doc.setFontSize(7.5);
+
+  for (const item of items) {
+    const date = item.sale_date
+      ? new Date(item.sale_date).toLocaleDateString("es-MX", {
+          dateStyle: "short",
+          timeZone: "America/Hermosillo",
+        })
+      : "—";
+
+    // wrap product name to column width
+    const nameLines: string[] = doc.splitTextToSize(item.product_name, COL.prod.w - 1);
+    const rowH = Math.max(nameLines.length * 4.2 + 5, 9);
+
+    if (y + rowH > 270) {
+      doc.addPage();
+      y = 22;
+    }
+
+    const baseY = y + 4;
+    const saleMethod = item.sale_payment_method;
+    const saleMethodLabel =
+      saleMethod === "card"     ? "Tarjeta"       :
+      saleMethod === "transfer" ? "Transferencia" :
+      saleMethod === "mixed"    ? "Mixto"         : "Efectivo";
+
+    // product name (multi-line) + SKU below
+    doc.setTextColor(0, 0, 0);
+    doc.text(nameLines, ML + 1, baseY);
+    doc.setTextColor(120, 120, 120);
+    doc.text(item.variant_sku, ML + 1, baseY + nameLines.length * 4.2);
+    doc.setTextColor(0, 0, 0);
+
+    cell(String(item.quantity),        COL.qty,     baseY);
+    cell(date,                         COL.date,    baseY);
+    cell(fmt(item.unit_price),         COL.price,   baseY);
+    cell(saleMethodLabel,              COL.pmethod, baseY);
+    cell(item.card_comm_portion > 0 ? fmt(item.card_comm_portion) : "—", COL.cardcom, baseY);
+    if (isFloor) cell(item.iva_portion > 0 ? fmt(item.iva_portion) : "—", COL.iva, baseY);
+    cell(fmt(item.brand_amount),       COL.amount,  baseY);
+
+    y += rowH;
+
+    doc.setDrawColor(220, 220, 220);
+    doc.line(ML, y, RIGHT, y);
+  }
+
+  // ── Totals ───────────────────────────────────────────────────────────────────
+  y += 5;
+
+  const totalRow = (label: string, value: number, bold = false, red = false) => {
+    doc.setFont("courier", bold ? "bold" : "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(red ? 180 : 0, 0, 0);
+    doc.text(label, ML + colW - 60, y);
+    doc.text(fmt(value), RIGHT, y, { align: "right" });
+    doc.setTextColor(0, 0, 0);
+    y += 6;
+  };
+
+  if (isFloor) {
+    totalRow("Ventas brutas", gross);
+    if (cardTotal > 0) totalRow("- Comisión tarjeta (4.6%)", cardTotal, false, true);
+    if (ivaTotal  > 0) totalRow("- IVA (16%)",               ivaTotal,  false, true);
+    // separator THEN total
+    doc.setDrawColor(100, 100, 100);
+    doc.line(ML + colW - 60, y - 1, RIGHT, y - 1);
+    y += 2;
+  }
+
+  totalRow("TOTAL PARA LA MARCA", total, true);
+
+  // ── Footer ───────────────────────────────────────────────────────────────────
+  doc.setFont("courier", "italic");
+  doc.setFontSize(7.5);
+  doc.setTextColor(140, 140, 140);
+  const quote = '"Soy un monje solitario caminando el mundo con un paraguas que gotea" - Mao Ze Dong';
+  const quoteLines: string[] = doc.splitTextToSize(quote, colW);
+  // pin to bottom of page but never overlap content
+  const footerY = Math.max(y + 10, 282 - quoteLines.length * 4);
+  doc.text(quoteLines, W / 2, footerY, { align: "center" });
+
+  doc.save(
+    `reporte-ventas-${brand.brand_name.toLowerCase().replace(/\s+/g, "-")}-${yyyy}-${mm}-${dd}.pdf`
+  );
+}
+
+// ─── Brand pay modal ──────────────────────────────────────────────────────────
 
 function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: PendingItem[]; onClose: () => void }) {
   const [method, setMethod] = useState("cash");
@@ -884,10 +1157,15 @@ function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: 
     setError(null);
     try {
       await createPayout.mutateAsync({ brand_id: brand.brand_id, items: adjustedItems, payment_method: method, notes: notes || undefined });
+      generatePayoutPDF({ brand, items, method, notes, isFloor, gross, ivaTotal, cardTotal, total });
       onClose();
     } catch (e) {
       setError((e as Error).message);
     }
+  }
+
+  function handleDownloadOnly() {
+    generatePayoutPDF({ brand, items, method, notes, isFloor, gross, ivaTotal, cardTotal, total });
   }
 
   return (
@@ -896,7 +1174,12 @@ function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: 
       <div className="relative bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
         <div>
           <h2 className="text-base font-bold text-[var(--foreground)]">Registrar pago</h2>
-          <p className="text-sm text-[var(--muted-foreground)]">{brand.brand_name}</p>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            {brand.brand_name}
+            {items.length < brand.item_count && (
+              <span className="ml-2 text-amber-600 text-xs">· liquidación parcial</span>
+            )}
+          </p>
         </div>
         <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex flex-col gap-1.5 text-sm">
           <div className="flex justify-between text-[var(--muted-foreground)]">
@@ -947,6 +1230,13 @@ function BrandPayModal({ brand, items, onClose }: { brand: BrandPending; items: 
         {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
         <div className="flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancelar</button>
+          <button
+            onClick={handleDownloadOnly}
+            title="Descargar PDF sin registrar pago"
+            className="px-3 py-2.5 rounded-xl border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+          >
+            <FileDown size={15} />
+          </button>
           <Button onClick={handlePay} disabled={createPayout.isPending} className="flex-1">
             {createPayout.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : `Pagar ${formatCurrency(total)}`}
           </Button>
