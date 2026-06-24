@@ -185,6 +185,85 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
   });
 }
 
+export interface PayoutItem {
+  id: string;
+  payout_id: string;
+  sale_item_id: string;
+  product_name: string;
+  variant_sku: string;
+  quantity: number;
+  unit_price: number;
+  brand_amount: number;
+}
+
+/** Items belonging to a specific historical payout */
+export function usePayoutItems(payoutId: string | null) {
+  return useQuery({
+    queryKey: ["payout-items", payoutId],
+    queryFn: async (): Promise<PayoutItem[]> => {
+      if (!payoutId) return [];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("brand_payout_items")
+        .select("id, payout_id, sale_item_id, product_name, variant_sku, quantity, unit_price, brand_amount")
+        .eq("payout_id", payoutId)
+        .order("id");
+      if (error) throw error;
+      return (data ?? []) as PayoutItem[];
+    },
+    enabled: !!payoutId,
+    staleTime: 30_000,
+  });
+}
+
+/** Remove a single item from a payout and recalculate payout totals */
+export function useRemovePayoutItem() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ payoutItemId, payoutId }: { payoutItemId: string; payoutId: string }) => {
+      const supabase = createClient();
+
+      // Delete the payout item — sale_item becomes unpaid again
+      const { error: delErr } = await supabase
+        .from("brand_payout_items")
+        .delete()
+        .eq("id", payoutItemId);
+      if (delErr) throw delErr;
+
+      // Recalculate payout totals from remaining items
+      const { data: remaining, error: remErr } = await supabase
+        .from("brand_payout_items")
+        .select("unit_price, quantity, brand_amount")
+        .eq("payout_id", payoutId);
+      if (remErr) throw remErr;
+
+      if (!remaining || remaining.length === 0) {
+        // No items left — delete the whole payout record
+        const { error: payoutDelErr } = await supabase
+          .from("brand_payouts")
+          .delete()
+          .eq("id", payoutId);
+        if (payoutDelErr) throw payoutDelErr;
+      } else {
+        const total_sold   = remaining.reduce((s, i) => s + Number(i.unit_price) * Number(i.quantity), 0);
+        const brand_amount = remaining.reduce((s, i) => s + Number(i.brand_amount), 0);
+        const store_amount = total_sold - brand_amount;
+        const { error: updErr } = await supabase
+          .from("brand_payouts")
+          .update({ total_sold, brand_amount, store_amount })
+          .eq("id", payoutId);
+        if (updErr) throw updErr;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["brand-payouts"] });
+      qc.invalidateQueries({ queryKey: ["payout-items"] });
+      qc.invalidateQueries({ queryKey: ["liquidaciones-pending"] });
+      qc.invalidateQueries({ queryKey: ["liquidaciones-items"] });
+    },
+  });
+}
+
 /** Historical payouts for a brand */
 export function useBrandPayouts(brandId: string | null) {
   return useQuery({

@@ -4,12 +4,14 @@ import { useState } from "react";
 import {
   Banknote, CreditCard, ArrowLeftRight, ChevronDown, ChevronUp,
   CheckCircle2, Loader2, History, RefreshCw, Store,
-  Users, Receipt, FileDown,
+  Users, Receipt, FileDown, Trash2,
 } from "lucide-react";
 import jsPDF from "jspdf";
+import { useMyRole } from "@/hooks/use-my-role";
 import {
   usePendingByBrand, usePendingItems, useBrandPayouts, useCreatePayout,
-  type BrandPending, type PendingItem,
+  usePayoutItems, useRemovePayoutItem,
+  type BrandPending, type PendingItem, type Payout,
 } from "@/hooks/use-liquidaciones";
 import {
   useStoreLiquidacion, useMonthSalesSummary, useGenerateStoreLiquidacion,
@@ -736,6 +738,8 @@ function BrandCard({
   const { data: items = [], isLoading } = usePendingItems(isExpanded ? brand.brand_id : null, brand.contract_type);
   const { data: history = [] } = useBrandPayouts(showingHistory ? brand.brand_id : null);
   const [showPay, setShowPay] = useState(false);
+  const { data: role } = useMyRole();
+  const isGod = role === "god";
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Sync selection when items load (select all by default)
@@ -851,30 +855,12 @@ function BrandCard({
                 </Button>
               </div>
               {showingHistory && history.length > 0 && (
-                <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-2">
+                <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-3">
                   <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
                     Pagos anteriores
                   </p>
                   {history.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-sm">
-                      <div>
-                        <p className="text-[var(--foreground)] font-medium">
-                          {p.period_start} → {p.period_end}
-                        </p>
-                        <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1">
-                          {p.payment_method === "cash"     && <Banknote size={11} />}
-                          {p.payment_method === "card"     && <CreditCard size={11} />}
-                          {p.payment_method === "transfer" && <ArrowLeftRight size={11} />}
-                          {p.payment_method === "cash" ? "Efectivo" : p.payment_method === "card" ? "Tarjeta" : "Transferencia"}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(p.brand_amount)}</p>
-                        <p className="text-xs text-green-600 flex items-center justify-end gap-1">
-                          <CheckCircle2 size={10} /> Pagado
-                        </p>
-                      </div>
-                    </div>
+                    <PayoutHistoryRow key={p.id} payout={p} isGod={isGod} />
                   ))}
                 </div>
               )}
@@ -923,6 +909,103 @@ function ItemRow({
         {formatCurrency(item.brand_amount)}
       </td>
     </tr>
+  );
+}
+
+// ─── Payout history row with expandable items (god-only remove) ───────────────
+
+function PayoutHistoryRow({ payout, isGod }: { payout: Payout; isGod: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const { data: items = [], isLoading } = usePayoutItems(expanded ? payout.id : null);
+  const remove = useRemovePayoutItem();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  async function handleRemove(payoutItemId: string) {
+    await remove.mutateAsync({ payoutItemId, payoutId: payout.id });
+    setConfirmId(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center justify-between text-sm w-full text-left"
+      >
+        <div>
+          <p className="text-[var(--foreground)] font-medium">
+            {payout.period_start} → {payout.period_end}
+          </p>
+          <p className="text-xs text-[var(--muted-foreground)] flex items-center gap-1">
+            {payout.payment_method === "cash"     && <Banknote size={11} />}
+            {payout.payment_method === "card"     && <CreditCard size={11} />}
+            {payout.payment_method === "transfer" && <ArrowLeftRight size={11} />}
+            {payout.payment_method === "cash" ? "Efectivo" : payout.payment_method === "card" ? "Tarjeta" : "Transferencia"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(payout.brand_amount)}</p>
+            <p className="text-xs text-green-600 flex items-center justify-end gap-1">
+              <CheckCircle2 size={10} /> Pagado
+            </p>
+          </div>
+          {expanded
+            ? <ChevronUp size={13} className="text-[var(--muted-foreground)]" />
+            : <ChevronDown size={13} className="text-[var(--muted-foreground)]" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="ml-1 border-l-2 border-[var(--border)] pl-3 flex flex-col gap-1">
+          {isLoading ? (
+            <Loader2 size={13} className="animate-spin text-[var(--muted-foreground)] my-1" />
+          ) : items.length === 0 ? (
+            <p className="text-xs text-[var(--muted-foreground)]">Sin artículos</p>
+          ) : (
+            items.map((item) => (
+              <div key={item.id} className="flex items-center justify-between gap-2 py-0.5">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-[var(--foreground)] truncate">{item.product_name}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    {item.variant_sku} · ×{item.quantity}
+                  </p>
+                </div>
+                <span className="text-xs font-mono text-[var(--foreground)] shrink-0">
+                  {formatCurrency(item.brand_amount)}
+                </span>
+                {isGod && (
+                  confirmId === item.id ? (
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => handleRemove(item.id)}
+                        disabled={remove.isPending}
+                        className="text-xs px-2 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+                      >
+                        {remove.isPending ? <Loader2 size={10} className="animate-spin" /> : "Confirmar"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmId(null)}
+                        className="text-xs px-2 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmId(item.id)}
+                      className="shrink-0 text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+                      title="Eliminar artículo del pago"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
