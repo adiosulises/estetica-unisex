@@ -57,7 +57,7 @@ const PAYMENT_METHODS = [
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LiquidacionesPage() {
-  const [tab, setTab] = useState<"marcas" | "tienda" | "transferencia">("marcas");
+  const [tab, setTab] = useState<"marcas" | "tienda">("marcas");
   const [month, setMonth] = useState(currentMonth());
 
   return (
@@ -103,21 +103,10 @@ export default function LiquidacionesPage() {
         >
           <Store size={15} /> Tienda
         </button>
-        <button
-          onClick={() => setTab("transferencia")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 font-medium transition-colors ${
-            tab === "transferencia"
-              ? "bg-[var(--primary)] text-white"
-              : "bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--border)]"
-          }`}
-        >
-          <ArrowLeftRight size={15} /> Transferencia
-        </button>
       </div>
 
       {tab === "marcas" && <MarcasTab />}
       {tab === "tienda" && <TiendaTab month={month} />}
-      {tab === "transferencia" && <TransferenciaTab />}
     </div>
   );
 }
@@ -700,21 +689,6 @@ function EditFloorRentForm({ rent, onClose }: { rent: BrandFloorRent; onClose: (
           {upsert.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : "Guardar"}
         </Button>
       </div>
-    </div>
-  );
-}
-
-// ─── Transferencia tab ────────────────────────────────────────────────────────
-
-function TransferenciaTab() {
-  return (
-    <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl px-6 py-5 flex flex-col gap-1.5">
-      <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
-        Datos de transferencia
-      </p>
-      <p className="font-mono text-sm text-[var(--foreground)] tracking-wide">722969028719807775</p>
-      <p className="text-sm text-[var(--foreground)]">Mercado Pago</p>
-      <p className="text-sm text-[var(--foreground)]">Marlene García</p>
     </div>
   );
 }

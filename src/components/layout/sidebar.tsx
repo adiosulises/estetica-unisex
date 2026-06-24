@@ -39,6 +39,7 @@ const navItems = [
   { href: "/empleados", label: "Empleados", icon: UserCog },
   { href: "/apartados", label: "Apartados", icon: Bookmark },
   { href: "/eventos",       label: "Eventos",       icon: CalendarDays },
+  { href: "/transferencia", label: "Transferencia", icon: ArrowLeftRight },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
