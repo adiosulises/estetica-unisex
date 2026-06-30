@@ -19,6 +19,10 @@ import {
   LIQ_CATEGORY_LABELS, LIQ_CATEGORY_COLORS,
   type StoreLiquidacionItem, type BrandFloorRent,
 } from "@/hooks/use-store-liquidacion";
+import {
+  useIvaBalance, useRentBalance, useStoreChargeHistory, useLiquidarCharge,
+  type ChargeType, type ChargeBalance,
+} from "@/hooks/use-store-charges";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { formatCurrency } from "@/lib/utils";
@@ -216,6 +220,15 @@ function TiendaTab({ month }: { month: string }) {
             <StatRow label="Repartible"       value={liq.distributable}  bold color="green" />
           </>
         )}
+      </div>
+
+      {/* Cargos recurrentes: IVA y Renta — balance acumulado, se liquida con un click */}
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide -mb-1">
+          Cargos recurrentes
+        </p>
+        <ChargeCard chargeType="iva" label="IVA" />
+        <ChargeCard chargeType="rent" label="Renta" />
       </div>
 
       {/* Floor rents section */}
@@ -909,6 +922,170 @@ function ItemRow({
         {formatCurrency(item.brand_amount)}
       </td>
     </tr>
+  );
+}
+
+// ─── Recurring charge card (IVA / Renta) — running balance, liquidate on click ─
+
+function ChargeCard({ chargeType, label }: { chargeType: ChargeType; label: string }) {
+  const isIva = chargeType === "iva";
+  const ivaBalance  = useIvaBalance();
+  const rentBalance = useRentBalance();
+  const { data: balance, isLoading } = isIva ? ivaBalance : rentBalance;
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [showLiquidar, setShowLiquidar] = useState(false);
+  const { data: history = [] } = useStoreChargeHistory(chargeType, showHistory);
+
+  const since = balance?.since
+    ? new Date(balance.since).toLocaleDateString("es-MX", { dateStyle: "medium", timeZone: "America/Hermosillo" })
+    : "—";
+
+  return (
+    <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-[var(--foreground)]">{label}</p>
+          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+            Acumulando desde {since}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            {isLoading ? (
+              <Loader2 size={14} className="animate-spin text-[var(--muted-foreground)]" />
+            ) : (
+              <p className="text-sm font-bold font-mono text-amber-600">
+                {formatCurrency(balance?.accumulated ?? 0)}
+              </p>
+            )}
+            <p className="text-xs text-[var(--muted-foreground)]">acumulado</p>
+          </div>
+          <Button
+            size="sm"
+            disabled={!balance || balance.accumulated <= 0}
+            onClick={() => setShowLiquidar(true)}
+          >
+            Liquidar
+          </Button>
+        </div>
+      </div>
+
+      <div className="px-5 pb-3">
+        <button
+          onClick={() => setShowHistory((v) => !v)}
+          className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+        >
+          <History size={13} />
+          {showHistory ? "Ocultar historial" : "Ver historial"}
+        </button>
+      </div>
+
+      {showHistory && (
+        <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-2">
+          {history.length === 0 ? (
+            <p className="text-xs text-[var(--muted-foreground)]">Sin liquidaciones anteriores</p>
+          ) : (
+            history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between text-sm">
+                <div>
+                  <p className="text-[var(--foreground)] font-medium">
+                    {new Date(h.period_start).toLocaleDateString("es-MX", { dateStyle: "short" })} →{" "}
+                    {new Date(h.period_end).toLocaleDateString("es-MX", { dateStyle: "short" })}
+                  </p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{pmLabel(h.payment_method)}</p>
+                </div>
+                <p className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(h.amount)}</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {showLiquidar && balance && (
+        <LiquidarChargeModal
+          chargeType={chargeType}
+          label={label}
+          balance={balance}
+          onClose={() => setShowLiquidar(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LiquidarChargeModal({
+  chargeType, label, balance, onClose,
+}: {
+  chargeType: ChargeType;
+  label: string;
+  balance: ChargeBalance;
+  onClose: () => void;
+}) {
+  const [method, setMethod] = useState("transfer");
+  const [notes, setNotes]   = useState("");
+  const [error, setError]   = useState<string | null>(null);
+  const liquidar = useLiquidarCharge();
+
+  async function handleLiquidar() {
+    if (!balance.since) return;
+    setError(null);
+    try {
+      await liquidar.mutateAsync({
+        charge_type: chargeType,
+        period_start: balance.since,
+        amount: Math.round(balance.accumulated * 100) / 100,
+        payment_method: method,
+        notes: notes || undefined,
+      });
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-[var(--card)] rounded-2xl border border-[var(--border)] shadow-2xl w-full max-w-sm mx-4 p-6 flex flex-col gap-4">
+        <div>
+          <h2 className="text-base font-bold text-[var(--foreground)]">Liquidar {label}</h2>
+          <p className="text-sm text-[var(--muted-foreground)]">
+            Desde {new Date(balance.since!).toLocaleDateString("es-MX", { dateStyle: "long" })}
+          </p>
+        </div>
+        <div className="bg-[var(--muted)] rounded-xl px-4 py-3 flex justify-between items-center">
+          <span className="text-sm text-[var(--muted-foreground)]">Monto a liquidar</span>
+          <span className="text-lg font-bold font-mono text-[var(--foreground)]">
+            {formatCurrency(balance.accumulated)}
+          </span>
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Método de pago</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {PAYMENT_METHODS.map(({ value, label: ml, icon: Icon }) => (
+              <button key={value} onClick={() => setMethod(value)}
+                className={`flex flex-col items-center gap-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${
+                  method === value
+                    ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                    : "bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:border-[var(--primary)]"
+                }`}>
+                <Icon size={15} />{ml}
+              </button>
+            ))}
+          </div>
+        </div>
+        <textarea placeholder="Notas (opcional)" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
+          className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] resize-none" />
+        {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-sm text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors">Cancelar</button>
+          <Button onClick={handleLiquidar} disabled={liquidar.isPending} className="flex-1">
+            {liquidar.isPending ? <><Loader2 size={14} className="animate-spin" /> Guardando...</> : `Liquidar ${formatCurrency(balance.accumulated)}`}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

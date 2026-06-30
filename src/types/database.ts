@@ -1,6 +1,7 @@
 // Auto-generado desde Supabase — no editar manualmente
 // Última actualización: 2026-05-04
 // Extendido manualmente: brand_floor_rents table + mark_floor_rent_paid RPC (2026-05-29)
+// Extendido manualmente: store_charges table + 'iva' movement_type (2026-06-29)
 
 export type Json =
   | string
@@ -105,6 +106,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      store_charges: {
+        Row: {
+          id: string
+          charge_type: string
+          period_start: string
+          period_end: string
+          amount: number
+          payment_method: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          charge_type: string
+          period_start: string
+          period_end?: string
+          amount: number
+          payment_method: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          charge_type?: string
+          period_start?: string
+          period_end?: string
+          amount?: number
+          payment_method?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
       }
       brand_payout_items: {
         Row: {
@@ -1304,6 +1338,7 @@ export type Database = {
         | "floor_income"
         | "salary"
         | "rent"
+        | "iva"
         | "maintenance"
         | "savings"
         | "debt_payment"
