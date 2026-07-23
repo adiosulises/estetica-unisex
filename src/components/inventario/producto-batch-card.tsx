@@ -146,17 +146,15 @@ export function ProductoBatchCard({
 
       {open && (
         <div className="p-5 flex flex-col gap-5">
-          {/* Fila 1: foto + datos principales */}
-          <div className="flex gap-5">
-            <div className="w-44 flex-shrink-0">
-              <FotoUpload
-                value={photoFiles[index] ?? null}
-                onChange={(f) => onPhotoChange(index, f)}
-              />
-            </div>
+          {/* Foto */}
+          <FotoUpload
+            value={photoFiles[index] ?? null}
+            onChange={(f) => onPhotoChange(index, f)}
+          />
 
-            <div className="flex-1 flex flex-col gap-4">
-              <div className="grid grid-cols-2 gap-4">
+          {/* Datos principales */}
+          <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   id={`products.${index}.name`}
                   label="Nombre del producto *"
@@ -175,7 +173,7 @@ export function ProductoBatchCard({
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <Select
                   id={`products.${index}.brand_id`}
                   label="Marca"
@@ -219,7 +217,6 @@ export function ProductoBatchCard({
                 error={productErrors?.description?.message}
                 {...register(`products.${index}.description`)}
               />
-            </div>
           </div>
 
           {/* Variantes */}
@@ -328,7 +325,7 @@ export function ProductoBatchCard({
             <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
               Costo de producción (opcional)
             </span>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Input
                 id={`products.${index}.production_cost`}
                 label="Costo total (MXN)"
