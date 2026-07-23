@@ -809,49 +809,61 @@ function BrandCard({
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-[var(--muted)] text-[var(--muted-foreground)]">
-                      <th className="px-4 py-2">
-                        <input
-                          type="checkbox"
-                          checked={allChecked}
-                          onChange={toggleAll}
-                          className="rounded"
+              {/* Vintage: agrupado por consignatario */}
+              {items.some((i) => i.consignatario_id !== null) ? (
+                <VintageGroupedView
+                  items={items}
+                  brand={brand}
+                  selected={selected}
+                  onToggleOne={toggleOne}
+                  onSelectGroup={(ids) => setSelected(new Set(ids))}
+                  onPay={() => setShowPay(true)}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-[var(--muted)] text-[var(--muted-foreground)]">
+                        <th className="px-4 py-2">
+                          <input
+                            type="checkbox"
+                            checked={allChecked}
+                            onChange={toggleAll}
+                            className="rounded"
+                          />
+                        </th>
+                        <th className="text-left px-2 py-2 font-medium">Folio</th>
+                        <th className="text-left px-3 py-2 font-medium">Producto</th>
+                        <th className="text-right px-3 py-2 font-medium">Cant.</th>
+                        <th className="text-right px-4 py-2 font-medium">Monto marca</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {items.map((item) => (
+                        <ItemRow
+                          key={item.sale_item_id}
+                          item={item}
+                          checked={selected.has(item.sale_item_id)}
+                          onToggle={() => toggleOne(item.sale_item_id)}
                         />
-                      </th>
-                      <th className="text-left px-2 py-2 font-medium">Folio</th>
-                      <th className="text-left px-3 py-2 font-medium">Producto</th>
-                      <th className="text-right px-3 py-2 font-medium">Cant.</th>
-                      <th className="text-right px-4 py-2 font-medium">Monto marca</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border)]">
-                    {items.map((item) => (
-                      <ItemRow
-                        key={item.sale_item_id}
-                        item={item}
-                        checked={selected.has(item.sale_item_id)}
-                        onToggle={() => toggleOne(item.sale_item_id)}
-                      />
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-[var(--border)]">
-                      <td />
-                      <td colSpan={3} className="px-2 py-3 text-sm font-semibold text-[var(--foreground)]">
-                        {selected.size < items.length
-                          ? `${selected.size} de ${items.length} seleccionados`
-                          : "Total"}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm font-bold font-mono text-amber-600">
-                        {formatCurrency(selectedTotal)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-[var(--border)]">
+                        <td />
+                        <td colSpan={3} className="px-2 py-3 text-sm font-semibold text-[var(--foreground)]">
+                          {selected.size < items.length
+                            ? `${selected.size} de ${items.length} seleccionados`
+                            : "Total"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm font-bold font-mono text-amber-600">
+                          {formatCurrency(selectedTotal)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
               <div className="px-5 py-3 flex gap-2 border-t border-[var(--border)]">
                 <button
                   onClick={onToggleHistory}
@@ -861,11 +873,13 @@ function BrandCard({
                   {showingHistory ? "Ocultar historial" : "Ver historial"}
                 </button>
                 <div className="flex-1" />
-                <Button size="sm" disabled={selected.size === 0} onClick={() => setShowPay(true)}>
-                  {selected.size < items.length && selected.size > 0
-                    ? `Pagar ${selected.size} artículo${selected.size > 1 ? "s" : ""}`
-                    : "Registrar pago"}
-                </Button>
+                {!items.some((i) => i.consignatario_id !== null) && (
+                  <Button size="sm" disabled={selected.size === 0} onClick={() => setShowPay(true)}>
+                    {selected.size < items.length && selected.size > 0
+                      ? `Pagar ${selected.size} artículo${selected.size > 1 ? "s" : ""}`
+                      : "Registrar pago"}
+                  </Button>
+                )}
               </div>
               {showingHistory && history.length > 0 && (
                 <div className="border-t border-[var(--border)] px-5 py-3 flex flex-col gap-3">
@@ -886,6 +900,110 @@ function BrandCard({
               )}
             </>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Vintage grouped view ─────────────────────────────────────────────────────
+
+function VintageGroupedView({
+  items, brand, selected, onToggleOne, onSelectGroup, onPay,
+}: {
+  items: PendingItem[];
+  brand: BrandPending;
+  selected: Set<string>;
+  onToggleOne: (id: string) => void;
+  onSelectGroup: (ids: string[]) => void;
+  onPay: () => void;
+}) {
+  // Group items by consignatario_id (null = SP / sin consignatario)
+  const groups = new Map<string, { label: string; items: PendingItem[] }>();
+  for (const item of items) {
+    const key = item.consignatario_id ?? "__none__";
+    const label = item.consignatario_name ?? "Sin consignatario";
+    if (!groups.has(key)) groups.set(key, { label, items: [] });
+    groups.get(key)!.items.push(item);
+  }
+
+  const selectedItems = items.filter((i) => selected.has(i.sale_item_id));
+  const selectedTotal = selectedItems.reduce((s, i) => s + i.brand_amount, 0);
+
+  return (
+    <div>
+      {Array.from(groups.entries()).map(([key, group], gi) => {
+        const groupIds = group.items.map((i) => i.sale_item_id);
+        const groupTotal = group.items.reduce((s, i) => s + i.brand_amount, 0);
+        const allGroupSelected = groupIds.every((id) => selected.has(id));
+
+        return (
+          <div key={key} className={gi > 0 ? "border-t border-[var(--border)]" : ""}>
+            {/* Consignatario header */}
+            <div className="flex items-center justify-between px-4 py-2.5 bg-[var(--muted)]/50">
+              <p className="text-xs font-semibold text-[var(--foreground)]">{group.label}</p>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-xs font-bold text-amber-600">
+                  {formatCurrency(groupTotal)}
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => { onSelectGroup(groupIds); onPay(); }}
+                >
+                  Liquidar {group.label.split(" ")[0]}
+                </Button>
+              </div>
+            </div>
+            {/* Items table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[var(--muted)] text-[var(--muted-foreground)]">
+                    <th className="px-4 py-2">
+                      <input
+                        type="checkbox"
+                        checked={allGroupSelected}
+                        onChange={() =>
+                          onSelectGroup(allGroupSelected ? [] : groupIds)
+                        }
+                        className="rounded"
+                      />
+                    </th>
+                    <th className="text-left px-2 py-2 font-medium">Folio</th>
+                    <th className="text-left px-3 py-2 font-medium">Producto</th>
+                    <th className="text-right px-3 py-2 font-medium">Cant.</th>
+                    <th className="text-right px-4 py-2 font-medium">Monto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)]">
+                  {group.items.map((item) => (
+                    <ItemRow
+                      key={item.sale_item_id}
+                      item={item}
+                      checked={selected.has(item.sale_item_id)}
+                      onToggle={() => onToggleOne(item.sale_item_id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+      {/* Footer: selected total across all groups */}
+      {selected.size > 0 && (
+        <div className="px-4 py-3 flex items-center justify-between border-t-2 border-[var(--border)] bg-[var(--muted)]/30">
+          <span className="text-xs text-[var(--muted-foreground)]">
+            {selected.size} artículo{selected.size !== 1 ? "s" : ""} seleccionado{selected.size !== 1 ? "s" : ""}
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-sm font-bold text-amber-600">
+              {formatCurrency(selectedTotal)}
+            </span>
+            <Button size="sm" onClick={onPay}>
+              Pagar selección
+            </Button>
+          </div>
         </div>
       )}
     </div>

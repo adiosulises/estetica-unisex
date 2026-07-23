@@ -27,6 +27,9 @@ export interface PendingItem {
   iva_portion: number;
   /** Only non-zero for floor brands: proportional card commission deduction */
   card_comm_portion: number;
+  /** Vintage only: consignatario who owns this piece */
+  consignatario_id: string | null;
+  consignatario_name: string | null;
 }
 
 export interface Payout {
@@ -134,7 +137,7 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
           quantity,
           unit_price,
           brand_amount,
-          variant:product_variants(sku, product:products(name)),
+          variant:product_variants(sku, product:products(name, consignatario:vintage_consignatarios(id, name))),
           sale:sales(folio, created_at, total, paid_card, iva_collected, payment_method)
         `)
         .eq("brand_id", brandId)
@@ -164,6 +167,7 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
           // Card commission shown for all brands (informational for pct, deducted for floor)
           const cardCommPortion = paidCard > 0 ? paidCard * 0.046 * ratio : 0;
 
+          const consig = (item.variant?.product as any)?.consignatario as { id: string; name: string } | null;
           return {
             sale_item_id: item.id,
             sale_folio: item.sale?.folio ?? "—",
@@ -177,6 +181,8 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
             brand_amount: isFloor ? gross : Number(item.brand_amount),
             iva_portion: ivaPortion,
             card_comm_portion: cardCommPortion,
+            consignatario_id: consig?.id ?? null,
+            consignatario_name: consig?.name ?? null,
           };
         });
     },

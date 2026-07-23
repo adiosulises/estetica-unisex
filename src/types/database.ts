@@ -2,6 +2,7 @@
 // Última actualización: 2026-05-04
 // Extendido manualmente: brand_floor_rents table + mark_floor_rent_paid RPC (2026-05-29)
 // Extendido manualmente: store_charges table + 'iva' movement_type (2026-06-29)
+// Extendido manualmente: vintage_consignatarios table + products.consignatario_id (2026-07-23)
 
 export type Json =
   | string
@@ -136,6 +137,33 @@ export type Database = {
           amount?: number
           payment_method?: string
           notes?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      vintage_consignatarios: {
+        Row: {
+          id: string
+          name: string
+          initial: string
+          share_pct: number
+          active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          initial: string
+          share_pct?: number
+          active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          initial?: string
+          share_pct?: number
+          active?: boolean
           created_at?: string
         }
         Relationships: []
@@ -843,6 +871,7 @@ export type Database = {
           description: string | null
           event_capacity: number | null
           event_date: string | null
+          consignatario_id: string | null
           id: string
           is_active: boolean
           kind: Database["public"]["Enums"]["product_kind"]
@@ -861,6 +890,7 @@ export type Database = {
           base_price?: number
           brand_id?: string | null
           category?: string
+          consignatario_id?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
@@ -884,6 +914,7 @@ export type Database = {
           base_price?: number
           brand_id?: string | null
           category?: string
+          consignatario_id?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null

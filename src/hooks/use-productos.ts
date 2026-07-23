@@ -86,6 +86,7 @@ export function useCreateBatch() {
             name: values.name,
             sku_prefix: values.sku_prefix.toUpperCase(),
             brand_id: values.brand_id || null,
+            consignatario_id: values.consignatario_id || null,
             category: values.category,
             base_price: values.base_price,
             description: values.description || null,

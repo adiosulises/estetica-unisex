@@ -10,6 +10,7 @@ export const varianteSchema = z.object({
 
 export const productoSchema = z.object({
   brand_id: z.string().uuid("Selecciona una marca").optional().or(z.literal("")),
+  consignatario_id: z.string().uuid().optional().or(z.literal("")),
   name: z.string().min(1, "El nombre es requerido").max(150),
   sku_prefix: z
     .string()
