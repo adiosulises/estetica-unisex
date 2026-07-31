@@ -355,6 +355,8 @@ export function useCancelSale() {
       qc.invalidateQueries({ queryKey: ["caja-sales-list"] });
       qc.invalidateQueries({ queryKey: ["caja-sales-today"] });
       qc.invalidateQueries({ queryKey: ["inventario"] });
+      qc.invalidateQueries({ queryKey: ["historial-sales"] });
+      qc.invalidateQueries({ queryKey: ["sale-items", saleId] });
     },
   });
 }

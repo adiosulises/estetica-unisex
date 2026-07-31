@@ -233,15 +233,15 @@ function SaleCard({
   const storeNet   = storeTotal - commission;
 
   return (
-    <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+    <div className={`rounded-2xl border overflow-hidden ${sale.status === "cancelled" ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900" : "bg-[var(--card)] border-[var(--border)]"}`}>
       {/* Header row */}
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-5 py-4 hover:bg-[var(--muted)]/30 transition-colors text-left"
       >
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">
-            <Receipt size={16} className="text-[var(--primary)]" />
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${sale.status === "cancelled" ? "bg-red-100 dark:bg-red-900/40" : "bg-[var(--primary)]/10"}`}>
+            <Receipt size={16} className={sale.status === "cancelled" ? "text-red-400" : "text-[var(--primary)]"} />
           </div>
           <div>
             <p className="text-sm font-semibold text-[var(--foreground)] font-mono">{sale.folio}</p>
@@ -255,13 +255,19 @@ function SaleCard({
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-sm font-bold text-[var(--foreground)] font-mono">{formatCurrency(sale.total)}</p>
-            <p className="flex items-center justify-end gap-1 text-xs text-[var(--muted-foreground)]">
-              {methodIcon}
-              {sale.payment_method === "cash"     ? "Efectivo"      :
-               sale.payment_method === "card"     ? "Tarjeta"       :
-               sale.payment_method === "transfer" ? "Transferencia" : "Mixto"}
+            <p className={`text-sm font-bold font-mono ${sale.status === "cancelled" ? "line-through text-red-400" : "text-[var(--foreground)]"}`}>
+              {formatCurrency(sale.total)}
             </p>
+            {sale.status === "cancelled" ? (
+              <span className="text-xs font-medium text-red-500">Cancelada</span>
+            ) : (
+              <p className="flex items-center justify-end gap-1 text-xs text-[var(--muted-foreground)]">
+                {methodIcon}
+                {sale.payment_method === "cash"     ? "Efectivo"      :
+                 sale.payment_method === "card"     ? "Tarjeta"       :
+                 sale.payment_method === "transfer" ? "Transferencia" : "Mixto"}
+              </p>
+            )}
           </div>
           {isExpanded
             ? <ChevronUp size={16} className="text-[var(--muted-foreground)]" />
