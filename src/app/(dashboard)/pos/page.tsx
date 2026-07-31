@@ -15,6 +15,7 @@ type MobileTab = "search" | "cart";
 export default function PosPage() {
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [discountNotes, setDiscountNotes] = useState("");
   const [showPayment, setShowPayment] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("search");
@@ -75,9 +76,18 @@ export default function PosPage() {
     setCart((prev) => prev.filter((c) => c.variantId !== variantId));
   }
 
+  function updateDiscount(variantId: string, discount: number) {
+    setCart((prev) =>
+      prev.map((c) =>
+        c.variantId === variantId ? { ...c, discount: Math.max(0, discount) } : c
+      )
+    );
+  }
+
   function clearCart() {
     setCart([]);
     setQuery("");
+    setDiscountNotes("");
     setSaleResult(null);
     setMobileTab("search");
     setTimeout(() => searchRef.current?.focus(), 50);
@@ -135,6 +145,7 @@ export default function PosPage() {
       paid_cash:     payment.paidCash,
       paid_card:     payment.paidCard,
       paid_transfer: payment.paidTransfer,
+      notes:         discountNotes || undefined,
     });
     const change = Math.max(0, payment.paidCash - total);
     setSaleResult({ folio: result.folio, total: result.total, change });
@@ -325,6 +336,7 @@ export default function PosPage() {
                     item={item}
                     onQtyChange={(delta) => updateQty(item.variantId, delta)}
                     onRemove={() => removeItem(item.variantId)}
+                    onDiscountChange={(d) => updateDiscount(item.variantId, d)}
                   />
                 ))}
               </ul>
@@ -349,6 +361,15 @@ export default function PosPage() {
                 <span>{formatCurrency(total)}</span>
               </div>
             </div>
+            {totalDiscount > 0 && (
+              <input
+                type="text"
+                value={discountNotes}
+                onChange={(e) => setDiscountNotes(e.target.value)}
+                placeholder="Motivo del descuento…"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              />
+            )}
             <Button
               onClick={() => setShowPayment(true)}
               disabled={cart.length === 0}
@@ -438,12 +459,25 @@ function CartItemRow({
   item,
   onQtyChange,
   onRemove,
+  onDiscountChange,
 }: {
   item: CartItem;
   onQtyChange: (delta: number) => void;
   onRemove: () => void;
+  onDiscountChange: (discount: number) => void;
 }) {
-  const lineTotal = item.unitPrice * item.quantity - item.discount;
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountInput, setDiscountInput] = useState(item.discount > 0 ? String(item.discount) : "");
+  const gross = item.unitPrice * item.quantity;
+  const lineTotal = gross - item.discount;
+
+  function handleDiscountBlur() {
+    const val = parseFloat(discountInput);
+    const discount = isNaN(val) ? 0 : Math.min(val, gross);
+    onDiscountChange(discount);
+    setDiscountInput(discount > 0 ? String(discount) : "");
+    if (discount === 0) setShowDiscount(false);
+  }
 
   return (
     <li className="px-4 py-3 flex gap-3 items-start">
@@ -457,9 +491,46 @@ function CartItemRow({
             {[item.size, item.color].filter(Boolean).join(" · ")}
           </p>
         )}
-        <p className="text-sm font-bold text-[var(--foreground)] mt-0.5">
-          {formatCurrency(lineTotal)}
-        </p>
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="text-sm font-bold text-[var(--foreground)]">
+            {formatCurrency(lineTotal)}
+          </p>
+          {item.discount > 0 && (
+            <span className="text-xs text-green-600 font-medium">
+              −{formatCurrency(item.discount)}
+            </span>
+          )}
+        </div>
+        {showDiscount ? (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <span className="text-xs text-[var(--muted-foreground)]">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              value={discountInput}
+              onChange={(e) => setDiscountInput(e.target.value)}
+              onBlur={handleDiscountBlur}
+              onKeyDown={(e) => e.key === "Enter" && handleDiscountBlur()}
+              placeholder="0"
+              className="w-20 px-2 py-0.5 text-xs rounded-lg border border-[var(--primary)] bg-[var(--background)] text-[var(--foreground)] focus:outline-none"
+            />
+            <button
+              onClick={() => { onDiscountChange(0); setDiscountInput(""); setShowDiscount(false); }}
+              className="text-xs text-[var(--muted-foreground)] hover:text-[var(--destructive)] transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowDiscount(true)}
+            className="mt-1 text-xs text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
+          >
+            + descuento
+          </button>
+        )}
       </div>
       <div className="flex flex-col items-end gap-1.5">
         <button

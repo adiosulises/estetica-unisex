@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useFieldArray, type Control, type FieldErrors } from "react-hook-form";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,20 @@ interface VariantesInputProps {
 const TALLAS_COMUNES = ["XS", "S", "M", "L", "XL", "XXL"];
 
 export function VariantesInput({ control, productIndex, errors, basePrice }: VariantesInputProps) {
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control,
     name: `products.${productIndex}.variants`,
   });
+
+  // Sync basePrice to all variant prices whenever it changes
+  const prevPrice = useRef<number>(basePrice);
+  useEffect(() => {
+    if (!basePrice || basePrice === prevPrice.current) return;
+    prevPrice.current = basePrice;
+    fields.forEach((field, i) => {
+      update(i, { ...field, price: basePrice });
+    });
+  }, [basePrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addTallasComunes() {
     const existing = fields.map((f) => f.size);

@@ -8,7 +8,7 @@ import {
   Loader2, Unlock, AlertTriangle, History, Calculator, X,
 } from "lucide-react";
 import {
-  useTodayRegister, useTodaySales, useTodayMovements,
+  useTodayRegister, useTodaySales, useTodayMovements, useTodaySalesList,
   useOpenRegister, useCloseRegister, useReopenRegister, useAddMovement,
 } from "@/hooks/use-caja";
 import { useMyRole } from "@/hooks/use-my-role";
@@ -317,6 +317,9 @@ function ClosedSummaryCard({
 // ── Desglose ventas ───────────────────────────────────────────────────────────
 function SalesBreakdown({ sales }: { sales: NonNullable<ReturnType<typeof useTodaySales>["data"]> }) {
   const commission = sales.card_sales * (1 - CARD_RATE);
+  const [showList, setShowList] = useState(false);
+  const { data: saleList = [] } = useTodaySalesList();
+
   return (
     <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -340,6 +343,39 @@ function SalesBreakdown({ sales }: { sales: NonNullable<ReturnType<typeof useTod
         )}
         <MethodRow icon={<ArrowLeftRight size={14} />} label="Transferencia"  amount={sales.transfer_sales} />
       </div>
+
+      {/* Lista expandible de ventas individuales */}
+      {saleList.length > 0 && (
+        <div className="mt-4 border-t border-[var(--border)] pt-3">
+          <button
+            onClick={() => setShowList((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+          >
+            {showList ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            {showList ? "Ocultar detalle" : "Ver ventas"}
+          </button>
+          {showList && (
+            <div className="mt-3 flex flex-col gap-1.5">
+              {saleList.map((s) => (
+                <div key={s.id} className="text-xs flex items-start justify-between gap-2 py-1.5 border-b border-[var(--border)] last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <span className="font-mono text-[var(--muted-foreground)]">{s.folio}</span>
+                    {s.discount_total > 0 && (
+                      <span className="ml-2 text-green-600">−{formatCurrency(s.discount_total)}</span>
+                    )}
+                    {s.notes && (
+                      <p className="text-[var(--muted-foreground)] italic truncate mt-0.5">"{s.notes}"</p>
+                    )}
+                  </div>
+                  <span className="font-mono font-semibold text-[var(--foreground)] shrink-0">
+                    {formatCurrency(s.total)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

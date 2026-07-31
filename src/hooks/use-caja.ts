@@ -263,6 +263,64 @@ export function useCajaHistory(month: string) {
   });
 }
 
+export interface SaleRow {
+  id: string;
+  folio: string;
+  total: number;
+  paid_cash: number;
+  paid_card: number;
+  paid_transfer: number;
+  discount_total: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export function useTodaySalesList() {
+  return useQuery({
+    queryKey: ["caja-sales-list", todayLocal()],
+    queryFn: async (): Promise<SaleRow[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id, folio, total, paid_cash, paid_card, paid_transfer, notes, created_at, sale_items(discount)")
+        .eq("status", "completed")
+        .gte("created_at", `${todayLocal()}T00:00:00-07:00`)
+        .lt("created_at", `${todayLocal()}T23:59:59-07:00`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((s: any) => ({
+        ...s,
+        discount_total: (s.sale_items ?? []).reduce((sum: number, i: any) => sum + Number(i.discount ?? 0), 0),
+      })) as SaleRow[];
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useDaySalesList(date: string | null) {
+  return useQuery({
+    queryKey: ["caja-sales-list", date],
+    queryFn: async (): Promise<SaleRow[]> => {
+      if (!date) return [];
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id, folio, total, paid_cash, paid_card, paid_transfer, notes, created_at, sale_items(discount)")
+        .eq("status", "completed")
+        .gte("created_at", `${date}T00:00:00-07:00`)
+        .lte("created_at", `${date}T23:59:59-07:00`)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((s: any) => ({
+        ...s,
+        discount_total: (s.sale_items ?? []).reduce((sum: number, i: any) => sum + Number(i.discount ?? 0), 0),
+      })) as SaleRow[];
+    },
+    enabled: !!date,
+    staleTime: 60_000,
+  });
+}
+
 export function useDayMovements(date: string | null) {
   return useQuery({
     queryKey: ["caja-movements-day", date],

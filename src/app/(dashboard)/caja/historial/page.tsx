@@ -6,7 +6,7 @@ import {
   ArrowLeft, ChevronDown, ChevronUp, Lock, Unlock,
   Banknote, CreditCard, TrendingUp, Loader2, AlertTriangle,
 } from "lucide-react";
-import { useCajaHistory, useDayMovements, type CashRegisterHistoryRow } from "@/hooks/use-caja";
+import { useCajaHistory, useDayMovements, useDaySalesList, type CashRegisterHistoryRow } from "@/hooks/use-caja";
 import { useMyRole } from "@/hooks/use-my-role";
 import { formatCurrency } from "@/lib/utils";
 
@@ -161,6 +161,8 @@ function RegisterCard({
   onToggle: () => void;
 }) {
   const { data: movements = [] } = useDayMovements(isExpanded ? register.date : null);
+  const { data: saleList = [] } = useDaySalesList(isExpanded ? register.date : null);
+  const [showSales, setShowSales] = useState(false);
 
   const isClosed = register.closing_cash !== null;
   const dateLabel = new Date(register.date + "T12:00:00").toLocaleDateString("es-MX", {
@@ -266,6 +268,52 @@ function RegisterCard({
               <div className="border-t border-[var(--border)] mt-1 pt-1.5">
                 <AmountRow label="Total" value={register.total_sales} bold />
               </div>
+            </div>
+          )}
+
+          {/* Individual sales */}
+          {saleList.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowSales((v) => !v)}
+                className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mb-2 flex items-center gap-1 hover:text-[var(--foreground)] transition-colors"
+              >
+                {showSales ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                Ver ventas ({saleList.length})
+              </button>
+              {showSales && (
+                <div className="flex flex-col gap-0.5">
+                  {saleList.map((sale) => {
+                    const timeStr = new Date(sale.created_at).toLocaleTimeString("es-MX", {
+                      hour: "2-digit", minute: "2-digit", timeZone: "America/Hermosillo",
+                    });
+                    return (
+                      <div
+                        key={sale.id}
+                        className="flex items-start justify-between text-xs py-1.5 border-b border-[var(--border)] last:border-0 gap-2"
+                      >
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="text-[var(--muted-foreground)] tabular-nums flex-shrink-0">{timeStr}</span>
+                          <div className="min-w-0">
+                            <span className="font-mono text-[var(--foreground)]">{sale.folio}</span>
+                            {sale.discount_total > 0 && (
+                              <span className="ml-1.5 text-emerald-600 dark:text-emerald-400">
+                                −{formatCurrency(sale.discount_total)}
+                              </span>
+                            )}
+                            {sale.notes && (
+                              <p className="text-[var(--muted-foreground)] italic truncate">{sale.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-mono font-medium text-[var(--foreground)] flex-shrink-0 tabular-nums">
+                          {formatCurrency(sale.total)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
