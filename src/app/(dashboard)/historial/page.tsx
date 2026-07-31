@@ -4,10 +4,12 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Receipt, Banknote, CreditCard, ArrowLeftRight,
-  ChevronDown, ChevronUp, User,
+  ChevronDown, ChevronUp, User, Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { useCancelSale } from "@/hooks/use-caja";
+import { useMyRole } from "@/hooks/use-my-role";
 
 const CARD_COMMISSION = 0.046; // MercadoPago 4.6%
 
@@ -131,6 +133,8 @@ export default function HistorialPage() {
 
   useSalesRealtime();
   const { data: sales = [], isLoading } = useSales(search, dateFrom, dateTo);
+  const { data: role } = useMyRole();
+  const isGod = role === "god";
 
   const totalShown = sales.reduce((s, sale) => s + sale.total, 0);
 
@@ -185,6 +189,7 @@ export default function HistorialPage() {
               sale={sale}
               isExpanded={expanded === sale.id}
               onToggle={() => setExpanded(expanded === sale.id ? null : sale.id)}
+              isGod={isGod}
             />
           ))}
         </div>
@@ -198,12 +203,16 @@ function SaleCard({
   sale,
   isExpanded,
   onToggle,
+  isGod,
 }: {
   sale: SaleRow;
   isExpanded: boolean;
   onToggle: () => void;
+  isGod: boolean;
 }) {
   const { data: items = [] } = useSaleItems(isExpanded ? sale.id : null);
+  const [confirm, setConfirm] = useState(false);
+  const cancelSale = useCancelSale();
 
   const date = new Date(sale.created_at).toLocaleString("es-MX", {
     dateStyle: "medium", timeStyle: "short", timeZone: "America/Hermosillo",
@@ -335,6 +344,40 @@ function SaleCard({
 
           {sale.notes && (
             <p className="text-xs text-[var(--muted-foreground)] italic">"{sale.notes}"</p>
+          )}
+
+          {isGod && sale.status !== "cancelled" && (
+            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]">
+              {confirm ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--muted-foreground)]">¿Cancelar esta venta?</span>
+                  <button
+                    onClick={() => { cancelSale.mutate(sale.id); setConfirm(false); }}
+                    disabled={cancelSale.isPending}
+                    className="text-xs px-2.5 py-1 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                  >
+                    {cancelSale.isPending ? "…" : "Sí, cancelar"}
+                  </button>
+                  <button
+                    onClick={() => setConfirm(false)}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirm(true)}
+                  className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={12} /> Cancelar venta
+                </button>
+              )}
+            </div>
+          )}
+
+          {sale.status === "cancelled" && (
+            <p className="text-xs text-red-500 font-medium text-center py-1">Venta cancelada</p>
           )}
         </div>
       )}
