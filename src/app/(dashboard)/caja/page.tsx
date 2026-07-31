@@ -5,11 +5,11 @@ import Link from "next/link";
 import {
   Wallet, TrendingUp, Banknote, CreditCard, ArrowLeftRight,
   Plus, Minus, CheckCircle2, Lock, ChevronDown, ChevronUp,
-  Loader2, Unlock, AlertTriangle, History, Calculator, X,
+  Loader2, Unlock, AlertTriangle, History, Calculator, X, Trash2,
 } from "lucide-react";
 import {
   useTodayRegister, useTodaySales, useTodayMovements, useTodaySalesList,
-  useOpenRegister, useCloseRegister, useReopenRegister, useAddMovement,
+  useOpenRegister, useCloseRegister, useReopenRegister, useAddMovement, useCancelSale,
 } from "@/hooks/use-caja";
 import { useMyRole } from "@/hooks/use-my-role";
 import { Button } from "@/components/ui/button";
@@ -79,7 +79,7 @@ export default function CajaPage() {
       {isOpen    && <OpenSummaryCard register={register} sales={sales} movements={movements} />}
       {isClosed  && <ClosedSummaryCard register={register} sales={sales} />}
 
-      {register && sales && <SalesBreakdown sales={sales} />}
+      {register && sales && <SalesBreakdown sales={sales} isGod={role === "god"} />}
 
       {/* Show movements only when open; when closed show read-only version */}
       {register && (
@@ -315,10 +315,12 @@ function ClosedSummaryCard({
 }
 
 // ── Desglose ventas ───────────────────────────────────────────────────────────
-function SalesBreakdown({ sales }: { sales: NonNullable<ReturnType<typeof useTodaySales>["data"]> }) {
+function SalesBreakdown({ sales, isGod }: { sales: NonNullable<ReturnType<typeof useTodaySales>["data"]>; isGod: boolean }) {
   const commission = sales.card_sales * (1 - CARD_RATE);
   const [showList, setShowList] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
   const { data: saleList = [] } = useTodaySalesList();
+  const cancelSale = useCancelSale();
 
   return (
     <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
@@ -367,9 +369,38 @@ function SalesBreakdown({ sales }: { sales: NonNullable<ReturnType<typeof useTod
                       <p className="text-[var(--muted-foreground)] italic truncate mt-0.5">"{s.notes}"</p>
                     )}
                   </div>
-                  <span className="font-mono font-semibold text-[var(--foreground)] shrink-0">
-                    {formatCurrency(s.total)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono font-semibold text-[var(--foreground)]">
+                      {formatCurrency(s.total)}
+                    </span>
+                    {isGod && (
+                      confirmId === s.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => { cancelSale.mutate(s.id); setConfirmId(null); }}
+                            disabled={cancelSale.isPending}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+                          >
+                            {cancelSale.isPending ? "…" : "Confirmar"}
+                          </button>
+                          <button
+                            onClick={() => setConfirmId(null)}
+                            className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmId(s.id)}
+                          className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+                          title="Cancelar venta"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

@@ -4,9 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, ChevronDown, ChevronUp, Lock, Unlock,
-  Banknote, CreditCard, TrendingUp, Loader2, AlertTriangle,
+  Banknote, CreditCard, TrendingUp, Loader2, AlertTriangle, Trash2,
 } from "lucide-react";
-import { useCajaHistory, useDayMovements, useDaySalesList, type CashRegisterHistoryRow } from "@/hooks/use-caja";
+import { useCajaHistory, useDayMovements, useDaySalesList, useCancelSale, type CashRegisterHistoryRow } from "@/hooks/use-caja";
 import { useMyRole } from "@/hooks/use-my-role";
 import { formatCurrency } from "@/lib/utils";
 
@@ -51,6 +51,7 @@ export default function CajaHistorialPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const { data: role, isLoading: roleLoading } = useMyRole();
+  const isGod = role === "god";
   const { data: registers = [], isLoading } = useCajaHistory(month);
 
   const isAdmin = role === "admin" || role === "god";
@@ -141,6 +142,7 @@ export default function CajaHistorialPage() {
               register={reg}
               isExpanded={expanded === reg.id}
               onToggle={() => setExpanded(expanded === reg.id ? null : reg.id)}
+              isGod={isGod}
             />
           ))}
         </div>
@@ -155,14 +157,18 @@ function RegisterCard({
   register,
   isExpanded,
   onToggle,
+  isGod,
 }: {
   register: CashRegisterHistoryRow;
   isExpanded: boolean;
   onToggle: () => void;
+  isGod: boolean;
 }) {
   const { data: movements = [] } = useDayMovements(isExpanded ? register.date : null);
   const { data: saleList = [] } = useDaySalesList(isExpanded ? register.date : null);
   const [showSales, setShowSales] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const cancelSale = useCancelSale();
 
   const isClosed = register.closing_cash !== null;
   const dateLabel = new Date(register.date + "T12:00:00").toLocaleDateString("es-MX", {
@@ -306,9 +312,38 @@ function RegisterCard({
                             )}
                           </div>
                         </div>
-                        <span className="font-mono font-medium text-[var(--foreground)] flex-shrink-0 tabular-nums">
-                          {formatCurrency(sale.total)}
-                        </span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="font-mono font-medium text-[var(--foreground)] tabular-nums">
+                            {formatCurrency(sale.total)}
+                          </span>
+                          {isGod && (
+                            confirmId === sale.id ? (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => { cancelSale.mutate(sale.id); setConfirmId(null); }}
+                                  disabled={cancelSale.isPending}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
+                                >
+                                  {cancelSale.isPending ? "…" : "Confirmar"}
+                                </button>
+                                <button
+                                  onClick={() => setConfirmId(null)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmId(sale.id)}
+                                className="text-[var(--muted-foreground)] hover:text-red-500 transition-colors"
+                                title="Cancelar venta"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )
+                          )}
+                        </div>
                       </div>
                     );
                   })}

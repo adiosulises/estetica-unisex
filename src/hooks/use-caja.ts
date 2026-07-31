@@ -321,6 +321,44 @@ export function useDaySalesList(date: string | null) {
   });
 }
 
+export function useCancelSale() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (saleId: string) => {
+      const supabase = createClient();
+
+      const { data: items, error: itemsErr } = await supabase
+        .from("sale_items")
+        .select("variant_id, quantity")
+        .eq("sale_id", saleId);
+      if (itemsErr) throw itemsErr;
+
+      const { error: cancelErr } = await supabase
+        .from("sales")
+        .update({ status: "cancelled" })
+        .eq("id", saleId);
+      if (cancelErr) throw cancelErr;
+
+      for (const item of items ?? []) {
+        const { data: variant } = await supabase
+          .from("product_variants")
+          .select("stock")
+          .eq("id", item.variant_id)
+          .single();
+        await supabase
+          .from("product_variants")
+          .update({ stock: (variant?.stock ?? 0) + item.quantity })
+          .eq("id", item.variant_id);
+      }
+    },
+    onSuccess: (_data, saleId) => {
+      qc.invalidateQueries({ queryKey: ["caja-sales-list"] });
+      qc.invalidateQueries({ queryKey: ["caja-sales-today"] });
+      qc.invalidateQueries({ queryKey: ["inventario"] });
+    },
+  });
+}
+
 export function useDayMovements(date: string | null) {
   return useQuery({
     queryKey: ["caja-movements-day", date],
