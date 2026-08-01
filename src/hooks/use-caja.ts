@@ -326,38 +326,8 @@ export function useCancelSale() {
   return useMutation({
     mutationFn: async (saleId: string) => {
       const supabase = createClient();
-
-      console.log("[cancelSale] fetching items for", saleId);
-      const { data: items, error: itemsErr } = await supabase
-        .from("sale_items")
-        .select("variant_id, quantity")
-        .eq("sale_id", saleId);
-      if (itemsErr) { console.error("[cancelSale] items error", itemsErr); throw itemsErr; }
-      console.log("[cancelSale] items", items);
-
-      const { data: updated, error: cancelErr } = await supabase
-        .from("sales")
-        .update({ status: "cancelled" })
-        .eq("id", saleId)
-        .select("id, status");
-      if (cancelErr) { console.error("[cancelSale] update error", cancelErr); throw cancelErr; }
-      console.log("[cancelSale] update result", updated);
-      if (!updated || updated.length === 0) {
-        throw new Error("No se pudo cancelar: sin permiso o venta no encontrada");
-      }
-
-      for (const item of items ?? []) {
-        const { data: variant } = await supabase
-          .from("product_variants")
-          .select("stock")
-          .eq("id", item.variant_id)
-          .single();
-        const { error: stockErr } = await supabase
-          .from("product_variants")
-          .update({ stock: (variant?.stock ?? 0) + item.quantity })
-          .eq("id", item.variant_id);
-        if (stockErr) console.error("[cancelSale] stock restore error", stockErr);
-      }
+      const { error } = await supabase.rpc("cancel_sale", { p_sale_id: saleId });
+      if (error) throw error;
     },
     onSuccess: (_data, saleId) => {
       qc.invalidateQueries({ queryKey: ["caja-sales-list"] });
