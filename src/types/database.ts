@@ -1353,6 +1353,7 @@ export type Database = {
         Returns: undefined
       }
       my_role: { Args: never; Returns: string }
+      cancel_sale: { Args: { p_sale_id: string }; Returns: void }
       mark_floor_rent_paid: {
         Args: {
           p_rent_id: string
