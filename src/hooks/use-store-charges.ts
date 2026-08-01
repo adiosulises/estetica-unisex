@@ -66,6 +66,7 @@ export function useIvaBalance() {
       const { data, error } = await supabase
         .from("sales")
         .select("iva_collected")
+        .eq("status", "completed")
         .gt("created_at", since);
       if (error) throw error;
 

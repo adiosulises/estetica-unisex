@@ -104,7 +104,11 @@ export function useCreateBatch() {
         if (prodErr) throw prodErr;
 
         // 3. Insertar variantes (el SKU lo genera el trigger)
-        const variantInserts = values.variants.map((v) => ({
+        const srcVariants = values.variants.length > 0
+          ? values.variants
+          : [{ size: "Único", color: null, price: values.base_price, stock: 1, low_stock_threshold: 0 }];
+
+        const variantInserts = srcVariants.map((v) => ({
           product_id: product.id,
           size: v.size || null,
           color: v.color || null,

@@ -23,7 +23,7 @@ export const productoSchema = z.object({
   production_paid_by: z.enum(["none", "store", "employee"]),
   production_paid_by_employee_id: z.string().uuid().optional().or(z.literal("")),
   production_notes: z.string().max(300).optional().or(z.literal("")),
-  variants: z.array(varianteSchema).min(1, "Agrega al menos una variante"),
+  variants: z.array(varianteSchema),
 });
 
 export const batchSchema = z.object({

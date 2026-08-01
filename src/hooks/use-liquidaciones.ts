@@ -65,7 +65,8 @@ export function usePendingByBrand() {
           brand_amount,
           unit_price,
           quantity,
-          brand:brands(id, name, contract_type, contract_value)
+          brand:brands(id, name, contract_type, contract_value),
+          sale:sales(status)
         `)
         .not("brand_id", "is", null);
 
@@ -81,6 +82,7 @@ export function usePendingByBrand() {
       const map = new Map<string, BrandPending>();
       for (const item of data ?? []) {
         if (paidSet.has(item.id)) continue;
+        if ((item.sale as any)?.status === "cancelled") continue;
         const brand = item.brand as any;
         if (!brand) continue;
 
@@ -138,7 +140,7 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
           unit_price,
           brand_amount,
           variant:product_variants(sku, product:products(name, consignatario:vintage_consignatarios(id, name))),
-          sale:sales(folio, created_at, total, paid_card, iva_collected, payment_method)
+          sale:sales(folio, created_at, total, paid_card, iva_collected, payment_method, status)
         `)
         .eq("brand_id", brandId)
         .order("created_at", { ascending: false });
@@ -150,6 +152,7 @@ export function usePendingItems(brandId: string | null, contractType?: string) {
       return (data ?? [])
         .filter((item: any) => {
           if (paidSet.has(item.id)) return false;
+          if ((item.sale as any)?.status === "cancelled") return false;
           const amount = isFloor
             ? Number(item.unit_price) * Number(item.quantity)
             : Number(item.brand_amount);

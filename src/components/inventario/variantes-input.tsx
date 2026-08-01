@@ -50,7 +50,7 @@ export function VariantesInput({ control, productIndex, errors, basePrice }: Var
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-[var(--foreground)]">
-          Variantes <span className="text-[var(--destructive)]">*</span>
+          Variantes <span className="text-xs font-normal text-[var(--muted-foreground)]">(opcional — si no agregas, se crea una variante "Único")</span>
         </span>
         <div className="flex gap-2">
           <Button type="button" variant="secondary" size="sm" onClick={addTallasComunes}>
