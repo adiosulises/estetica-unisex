@@ -358,6 +358,9 @@ export function useCancelSale() {
       qc.invalidateQueries({ queryKey: ["historial-sales"] });
       qc.invalidateQueries({ queryKey: ["sale-items", saleId] });
     },
+    onError: (err) => {
+      console.error("[useCancelSale]", err);
+    },
   });
 }
 

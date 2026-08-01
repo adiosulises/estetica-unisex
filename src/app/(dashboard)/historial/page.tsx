@@ -353,7 +353,10 @@ function SaleCard({
           )}
 
           {isGod && sale.status !== "cancelled" && (
-            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]">
+            <div className="flex flex-col items-end gap-1 pt-1 border-t border-[var(--border)]">
+              {cancelSale.isError && (
+                <p className="text-xs text-red-500">{(cancelSale.error as Error)?.message ?? "Error al cancelar"}</p>
+              )}
               {confirm ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-[var(--muted-foreground)]">¿Cancelar esta venta?</span>
@@ -381,6 +384,7 @@ function SaleCard({
               )}
             </div>
           )}
+
 
           {sale.status === "cancelled" && (
             <p className="text-xs text-red-500 font-medium text-center py-1">Venta cancelada</p>
