@@ -188,11 +188,13 @@ export function useCloseRegister() {
         .eq("id", id);
       if (error) throw error;
 
-      // Auto-register positive difference as store surplus
-      if (difference > 0.009) {
+      // Auto-register positive difference as store surplus ONLY when
+      // expected_cash is non-negative (avoids false surplus from negative expected)
+      const cashDiff = closing_cash - expected_cash;
+      if (cashDiff > 0.009 && expected_cash >= 0) {
         await supabase.from("cash_movements").insert({
           type: "store_surplus" as any,
-          amount: difference,
+          amount: cashDiff,
           description: `Sobrante de corte`,
           payment_method: "cash",
           employee_id: user?.id ?? null,
