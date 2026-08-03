@@ -6,11 +6,14 @@ import {
   Wallet, TrendingUp, Banknote, CreditCard, ArrowLeftRight,
   Plus, Minus, CheckCircle2, Lock, ChevronDown, ChevronUp,
   Loader2, Unlock, AlertTriangle, History, Calculator, X, Trash2,
+  PieChart, Gift,
 } from "lucide-react";
 import {
   useTodayRegister, useTodaySales, useTodayMovements, useTodaySalesList,
   useOpenRegister, useCloseRegister, useReopenRegister, useAddMovement, useCancelSale,
+  useCajaBreakdown, useSobraanteHistory,
 } from "@/hooks/use-caja";
+import { useConfig } from "@/hooks/use-configuracion";
 import { useMyRole } from "@/hooks/use-my-role";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
@@ -23,6 +26,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
   savings: "Ahorro", debt_payment: "Pago deuda", construction: "Construcción",
   production_reimbursement: "Reembolso producción", event_income: "Evento",
   deposit: "Depósito", withdrawal: "Retiro", adjustment: "Ajuste",
+  store_surplus: "Sobrante de corte",
 };
 
 const MANUAL_TYPES = [
@@ -44,6 +48,9 @@ export default function CajaPage() {
   const { data: sales } = useTodaySales();
   const { data: movements = [] } = useTodayMovements();
   const { data: role } = useMyRole();
+  const { data: config } = useConfig();
+  const { data: breakdown } = useCajaBreakdown(config?.rent_amount);
+  const { data: sobraanteHistory = [] } = useSobraanteHistory();
 
   const isClosed  = register && register.closing_cash !== null;
   const isOpen    = register && register.closing_cash === null;
@@ -80,6 +87,10 @@ export default function CajaPage() {
       {isClosed  && <ClosedSummaryCard register={register} sales={sales} />}
 
       {register && sales && <SalesBreakdown sales={sales} isGod={role === "god"} />}
+
+      {breakdown && <BreakdownCard breakdown={breakdown} />}
+
+      {sobraanteHistory.length > 0 && <SobraanteCard entries={sobraanteHistory} />}
 
       {/* Show movements only when open; when closed show read-only version */}
       {register && (
@@ -418,6 +429,105 @@ function MethodRow({ icon, label, amount, muted, sub }: {
     <div className={`flex justify-between items-center text-sm ${muted ? "text-red-500" : sub ? "text-green-600" : "text-[var(--muted-foreground)]"}`}>
       <span className="flex items-center gap-2">{icon}{label}</span>
       <span className="font-mono">{muted && amount < 0 ? "-" : ""}{formatCurrency(Math.abs(amount))}</span>
+    </div>
+  );
+}
+
+// ── Breakdown de a quién pertenece el dinero ──────────────────────────────────
+import type { CajaBreakdown, SobraanteEntry } from "@/hooks/use-caja";
+
+function BreakdownCard({ breakdown }: { breakdown: CajaBreakdown }) {
+  const total = breakdown.brands_pending + breakdown.iva_pending + breakdown.rent_pending + breakdown.sobrante;
+
+  const rows: { label: string; amount: number; color: string }[] = [
+    { label: "Marcas por liquidar",  amount: breakdown.brands_pending, color: "bg-violet-500" },
+    { label: "IVA acumulado",        amount: breakdown.iva_pending,    color: "bg-amber-500"  },
+    { label: "Renta acumulada",      amount: breakdown.rent_pending,   color: "bg-rose-500"   },
+    { label: "Sobrante tienda",      amount: breakdown.sobrante,       color: "bg-emerald-500" },
+  ].filter((r) => r.amount > 0.009);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <PieChart size={16} className="text-[var(--primary)]" />
+        <span className="text-sm font-semibold text-[var(--foreground)]">¿De quién es este dinero?</span>
+      </div>
+
+      {/* Bar */}
+      {total > 0 && (
+        <div className="flex h-2.5 rounded-full overflow-hidden mb-4 gap-0.5">
+          {rows.map((r) => (
+            <div
+              key={r.label}
+              className={`${r.color} rounded-full`}
+              style={{ width: `${(r.amount / total) * 100}%` }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${r.color}`} />
+              <span className="text-[var(--muted-foreground)]">{r.label}</span>
+            </div>
+            <span className="font-mono font-medium text-[var(--foreground)]">{formatCurrency(r.amount)}</span>
+          </div>
+        ))}
+        {total > 0 && (
+          <div className="flex items-center justify-between text-sm pt-2 border-t border-[var(--border)]">
+            <span className="font-semibold text-[var(--foreground)]">Total identificado</span>
+            <span className="font-mono font-bold text-[var(--foreground)]">{formatCurrency(total)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SobraanteCard({ entries }: { entries: SobraanteEntry[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const total = entries.reduce((s, e) => s + e.amount, 0);
+
+  return (
+    <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] overflow-hidden">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-[var(--muted)]/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Gift size={16} className="text-emerald-500" />
+          <span className="text-sm font-semibold text-[var(--foreground)]">Sobrante acumulado</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="font-mono font-bold text-emerald-600">{formatCurrency(total)}</span>
+          {expanded ? <ChevronUp size={14} className="text-[var(--muted-foreground)]" /> : <ChevronDown size={14} className="text-[var(--muted-foreground)]" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-[var(--border)] divide-y divide-[var(--border)]">
+          {entries.map((e) => {
+            const dateStr = new Date(e.created_at).toLocaleDateString("es-MX", {
+              day: "numeric", month: "short", year: "numeric",
+              timeZone: "America/Hermosillo",
+            });
+            return (
+              <div key={e.id} className="flex items-center justify-between px-5 py-3 text-sm">
+                <div>
+                  <p className="text-[var(--foreground)]">{e.description}</p>
+                  <p className="text-xs text-[var(--muted-foreground)]">{dateStr}</p>
+                </div>
+                <span className="font-mono font-semibold text-emerald-600">+{formatCurrency(e.amount)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

@@ -187,6 +187,17 @@ export function useCloseRegister() {
         })
         .eq("id", id);
       if (error) throw error;
+
+      // Auto-register positive difference as store surplus
+      if (difference > 0.009) {
+        await supabase.from("cash_movements").insert({
+          type: "store_surplus" as any,
+          amount: difference,
+          description: `Sobrante de corte`,
+          payment_method: "cash",
+          employee_id: user?.id ?? null,
+        });
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["caja-register"] }),
   });
@@ -339,6 +350,146 @@ export function useCancelSale() {
     onError: (err) => {
       console.error("[useCancelSale]", err);
     },
+  });
+}
+
+// ─── Sobrante acumulado ───────────────────────────────────────────────────────
+
+export interface SobraanteEntry {
+  id: string;
+  amount: number;
+  description: string;
+  created_at: string;
+}
+
+export function useSobraanteHistory() {
+  return useQuery({
+    queryKey: ["sobrante-history"],
+    queryFn: async (): Promise<SobraanteEntry[]> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("cash_movements")
+        .select("id, amount, description, created_at")
+        .eq("type", "store_surplus" as any)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SobraanteEntry[];
+    },
+    staleTime: 60_000,
+  });
+}
+
+export function useSobraanteTotal() {
+  return useQuery({
+    queryKey: ["sobrante-total"],
+    queryFn: async (): Promise<number> => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "store_surplus" as any);
+      if (error) throw error;
+      return (data ?? []).reduce((s, r) => s + Number(r.amount), 0);
+    },
+    staleTime: 60_000,
+  });
+}
+
+// ─── Breakdown de la caja ─────────────────────────────────────────────────────
+
+export interface CajaBreakdown {
+  /** Suma de brand_amount de sale_items no liquidados */
+  brands_pending: number;
+  /** IVA acumulado desde último cobro */
+  iva_pending: number;
+  /** Sobrantes de corte acumulados */
+  sobrante: number;
+  /** Renta acumulada (prorated) */
+  rent_pending: number;
+}
+
+export function useCajaBreakdown(rentAmount: number | undefined) {
+  return useQuery({
+    queryKey: ["caja-breakdown", rentAmount],
+    queryFn: async (): Promise<CajaBreakdown> => {
+      const supabase = createClient();
+
+      // 1. Marcas pendientes de liquidar
+      const { data: saleItems } = await supabase
+        .from("sale_items")
+        .select("id, brand_amount, unit_price, quantity, brand:brands(contract_type), sale:sales(status)")
+        .not("brand_id", "is", null);
+
+      const { data: paidItems } = await supabase
+        .from("brand_payout_items")
+        .select("sale_item_id");
+      const paidSet = new Set((paidItems ?? []).map((p: any) => p.sale_item_id));
+
+      const brands_pending = (saleItems ?? []).reduce((sum, item: any) => {
+        if (paidSet.has(item.id)) return sum;
+        if (item.sale?.status === "cancelled") return sum;
+        const isFloor = item.brand?.contract_type === "floor";
+        const amount = isFloor
+          ? Number(item.unit_price) * Number(item.quantity)
+          : Number(item.brand_amount);
+        return sum + amount;
+      }, 0);
+
+      // 2. IVA acumulado
+      const { data: ivaCharges } = await supabase
+        .from("store_charges")
+        .select("period_end")
+        .eq("charge_type", "iva")
+        .order("period_end", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const ivaSince = ivaCharges?.period_end ?? null;
+      let iva_pending = 0;
+      if (ivaSince) {
+        const { data: ivaData } = await supabase
+          .from("sales")
+          .select("iva_collected")
+          .eq("status", "completed")
+          .gt("created_at", ivaSince);
+        iva_pending = (ivaData ?? []).reduce((s, r) => s + Number(r.iva_collected ?? 0), 0);
+      } else {
+        const { data: ivaData } = await supabase
+          .from("sales")
+          .select("iva_collected")
+          .eq("status", "completed");
+        iva_pending = (ivaData ?? []).reduce((s, r) => s + Number(r.iva_collected ?? 0), 0);
+      }
+
+      // 3. Sobrante acumulado
+      const { data: sobraanteData } = await supabase
+        .from("cash_movements")
+        .select("amount")
+        .eq("type", "store_surplus" as any);
+      const sobrante = (sobraanteData ?? []).reduce((s, r) => s + Number(r.amount), 0);
+
+      // 4. Renta acumulada (prorated por día)
+      const { data: rentCharges } = await supabase
+        .from("store_charges")
+        .select("period_end")
+        .eq("charge_type", "rent")
+        .order("period_end", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      let rent_pending = 0;
+      if (rentAmount && rentAmount > 0) {
+        const rentSince = rentCharges?.period_end ?? null;
+        const sinceDate = rentSince ? new Date(rentSince) : null;
+        if (sinceDate) {
+          const days = Math.max(0, (Date.now() - sinceDate.getTime()) / (24 * 60 * 60 * 1000));
+          rent_pending = Math.min((rentAmount / 30.4368) * days, rentAmount);
+        }
+      }
+
+      return { brands_pending, iva_pending, sobrante, rent_pending };
+    },
+    staleTime: 60_000,
   });
 }
 

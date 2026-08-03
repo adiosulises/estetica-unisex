@@ -42,6 +42,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
   savings: "Ahorro", debt_payment: "Pago deuda", construction: "Construcción",
   production_reimbursement: "Reembolso producción", event_income: "Evento",
   deposit: "Depósito", withdrawal: "Retiro", adjustment: "Ajuste",
+  store_surplus: "Sobrante de corte",
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

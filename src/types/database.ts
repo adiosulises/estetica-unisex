@@ -1380,6 +1380,7 @@ export type Database = {
         | "deposit"
         | "withdrawal"
         | "adjustment"
+        | "store_surplus"
       payment_method: "cash" | "card" | "transfer" | "mixed"
       payout_status: "pending" | "paid" | "partial"
       product_kind: "consignment" | "own" | "ticket" | "service"
@@ -1526,6 +1527,7 @@ export const Constants = {
         "deposit",
         "withdrawal",
         "adjustment",
+        "store_surplus",
       ],
       payment_method: ["cash", "card", "transfer", "mixed"],
       payout_status: ["pending", "paid", "partial"],
