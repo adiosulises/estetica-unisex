@@ -175,8 +175,9 @@ function OpenSummaryCard({
   const cashMovAdj     = nonSaleMov
     .filter((m) => m.payment_method === "cash")
     .reduce((s, m) => s + m.amount, 0);
+  // Only card/mixed movements affect terminal — transfer payments are bank wires, not physical terminal
   const cardMovAdj     = nonSaleMov
-    .filter((m) => m.payment_method === "card" || m.payment_method === "transfer" || m.payment_method === "mixed")
+    .filter((m) => m.payment_method === "card" || m.payment_method === "mixed")
     .reduce((s, m) => s + m.amount, 0);
 
   const expectedCash   = register.opening_cash + cashSales + cashMovAdj;
