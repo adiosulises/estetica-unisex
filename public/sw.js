@@ -1,4 +1,4 @@
-const CACHE = "guerrilla-eu-v1";
+const CACHE = "guerrilla-eu-v2";
 
 const STATIC = [
   "/",
@@ -37,4 +37,20 @@ self.addEventListener("fetch", (e) => {
       })
       .catch(() => caches.match(e.request))
   );
+});
+
+self.addEventListener("push", (e) => {
+  const data = e.data?.json() ?? {};
+  e.waitUntil(
+    self.registration.showNotification(data.title ?? "guerrilla eu", {
+      body: data.body ?? "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(clients.openWindow("/pos"));
 });

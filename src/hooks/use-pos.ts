@@ -159,10 +159,24 @@ export function useCreateSale() {
 
       return result;
     },
-    onSuccess: () => {
-      // Invalidar inventario para reflejar el stock descontado
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["productos"] });
       queryClient.invalidateQueries({ queryKey: ["pos-search"] });
+
+      const formatted = new Intl.NumberFormat("es-MX", {
+        style: "currency",
+        currency: "MXN",
+        minimumFractionDigits: 0,
+      }).format(result.total);
+
+      fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Nueva venta",
+          body: `${result.folio} · ${formatted}`,
+        }),
+      }).catch(console.error);
     },
   });
 }

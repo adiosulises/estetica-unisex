@@ -3,8 +3,10 @@
 import { useState, useEffect } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./sidebar";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
+  usePushNotifications();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
