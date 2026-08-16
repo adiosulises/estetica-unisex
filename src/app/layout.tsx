@@ -10,6 +10,7 @@ export const viewport: Viewport = {
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { PWARegister } from "@/components/pwa-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,6 +48,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="guerrilla eu" />
       </head>
       <body className="h-full antialiased">
+        <PWARegister />
         <QueryProvider>{children}</QueryProvider>
       </body>
     </html>
