@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Settings, Loader2, Check, AlertTriangle } from "lucide-react";
+import { Settings, Loader2, Check, AlertTriangle, Bell, BellOff } from "lucide-react";
 import { useConfig, useUpdateConfig } from "@/hooks/use-configuracion";
 import { useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,46 @@ export default function ConfiguracionPage() {
   const qc = useQueryClient();
 
   // Admin reset state
+  const [notifStatus, setNotifStatus] = useState<"idle" | "loading" | "granted" | "denied">("idle");
+
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === "granted") setNotifStatus("granted");
+    else if (Notification.permission === "denied") setNotifStatus("denied");
+  }, []);
+
+  async function handleRequestNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    setNotifStatus("loading");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { setNotifStatus("denied"); return; }
+
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setNotifStatus("denied"); return; }
+
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+        });
+      }
+
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: sub.toJSON(), userId: user.id }),
+      });
+
+      setNotifStatus("granted");
+    } catch {
+      setNotifStatus("idle");
+    }
+  }
+
   const [confirmReset, setConfirmReset] = useState<"ventas" | "caja" | null>(null);
   const [resetting, setResetting] = useState(false);
   const [resetDone, setResetDone] = useState<string | null>(null);
@@ -272,6 +312,42 @@ export default function ConfiguracionPage() {
           <><Check size={14} /> Guardado</>
         ) : "Guardar cambios"}
       </Button>
+
+      {/* Notificaciones */}
+      <Section title="Notificaciones">
+        <p className="text-xs text-[var(--muted-foreground)] -mt-1">
+          Recibe una notificación push en este dispositivo cada vez que se registre una venta.
+        </p>
+        {notifStatus === "denied" ? (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--muted)]">
+            <BellOff size={16} className="text-[var(--muted-foreground)] flex-shrink-0" />
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Notificaciones bloqueadas. Actívalas desde la configuración del navegador.
+            </p>
+          </div>
+        ) : notifStatus === "granted" ? (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-green-200 bg-green-50">
+            <Bell size={16} className="text-green-600 flex-shrink-0" />
+            <p className="text-sm text-green-700 font-medium">Notificaciones activas en este dispositivo</p>
+          </div>
+        ) : (
+          <button
+            onClick={handleRequestNotifications}
+            disabled={notifStatus === "loading"}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--background)] hover:bg-[var(--muted)] transition-colors text-left disabled:opacity-50"
+          >
+            {notifStatus === "loading" ? (
+              <Loader2 size={16} className="animate-spin text-[var(--primary)] flex-shrink-0" />
+            ) : (
+              <Bell size={16} className="text-[var(--primary)] flex-shrink-0" />
+            )}
+            <div>
+              <p className="text-sm font-medium text-[var(--foreground)]">Activar notificaciones</p>
+              <p className="text-xs text-[var(--muted-foreground)]">Se pedirá permiso al navegador / sistema</p>
+            </div>
+          </button>
+        )}
+      </Section>
 
       {/* Admin: Limpiar datos de prueba */}
       <Section title="Zona de administrador">
