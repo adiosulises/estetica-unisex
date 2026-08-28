@@ -194,6 +194,38 @@ function useTopEmployees(start: string, end: string) {
   });
 }
 
+function useTopBrands(start: string | null, end: string | null) {
+  return useQuery({
+    queryKey: ["dashboard-top-brands", start, end],
+    queryFn: async () => {
+      const supabase = createClient();
+      let q = supabase
+        .from("sale_items")
+        .select("brand_amount, store_amount, sale:sales(status, created_at), brand:brands(id, name)")
+        .not("brand_id", "is", null);
+
+      if (start) q = (q as any).gte("sale.created_at", `${start}T00:00:00-07:00`);
+      if (end)   q = (q as any).lte("sale.created_at", `${end}T23:59:59-07:00`);
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      const map = new Map<string, { name: string; revenue: number; items: number }>();
+      for (const item of data ?? []) {
+        const sale  = (item as any).sale;
+        const brand = (item as any).brand;
+        if (!brand || sale?.status !== "completed") continue;
+        const amount = Number(item.brand_amount) + Number(item.store_amount);
+        const ex = map.get(brand.id);
+        if (ex) { ex.revenue += amount; ex.items += 1; }
+        else map.set(brand.id, { name: brand.name, revenue: amount, items: 1 });
+      }
+      return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+    },
+    staleTime: 60_000,
+  });
+}
+
 function useMonthlyHistory() {
   return useQuery({
     queryKey: ["dashboard-monthly-history"],
@@ -287,6 +319,23 @@ export default function DashboardPage() {
     };
   })();
   const { data: topEmployees = [] } = useTopEmployees(empPeriod.start, empPeriod.end);
+
+  // Top brands: all-time or month navigation
+  const [brandMonthOffset, setBrandMonthOffset] = useState<number | "all">(0);
+  const brandPeriod = (() => {
+    if (brandMonthOffset === "all") return { start: null, end: null, label: "Todo el tiempo" };
+    if (brandMonthOffset === 0) return { start: periodStart, end: todayLocal(), label: "Período actual" };
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+    const d   = new Date(now.getFullYear(), now.getMonth() + (brandMonthOffset as number), 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const label = d.toLocaleDateString("es-MX", { month: "long", year: "numeric", timeZone: TZ });
+    return {
+      start: d.toLocaleDateString("en-CA", { timeZone: TZ }),
+      end:   end.toLocaleDateString("en-CA", { timeZone: TZ }),
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+    };
+  })();
+  const { data: topBrands = [] } = useTopBrands(brandPeriod.start, brandPeriod.end);
 
   const monthlyGoal    = config?.monthly_goal ?? 0;
   const monthTotal     = stats?.month_total ?? 0;
@@ -447,6 +496,67 @@ export default function DashboardPage() {
                     <div className="text-right">
                       <span className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(emp.total)}</span>
                       <span className="text-xs text-[var(--muted-foreground)] ml-2">{emp.count} {emp.count === 1 ? "venta" : "ventas"}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--primary)] rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Top brands ─────────────────────────────────────────────────────── */}
+      <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Package size={15} className="text-[var(--primary)]" />
+            <p className="text-sm font-semibold text-[var(--foreground)]">Top marcas</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setBrandMonthOffset((o) => o === "all" ? 0 : (o as number) - 1)}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs"
+            >‹</button>
+            <button
+              onClick={() => setBrandMonthOffset("all")}
+              className={`px-2 py-0.5 rounded-lg text-xs border transition-colors ${brandMonthOffset === "all" ? "bg-[var(--primary)] text-white border-[var(--primary)]" : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`}
+            >
+              Todo
+            </button>
+            <span className="text-xs text-[var(--muted-foreground)] min-w-24 text-center capitalize">
+              {brandMonthOffset !== "all" && brandPeriod.label}
+            </span>
+            <button
+              onClick={() => setBrandMonthOffset((o) => o === "all" ? 0 : Math.min(0, (o as number) + 1))}
+              disabled={brandMonthOffset === 0 || brandMonthOffset === "all"}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs disabled:opacity-30"
+            >›</button>
+          </div>
+        </div>
+        {topBrands.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)] text-center py-4">Sin ventas de marcas en este período</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {topBrands.map((brand, i) => {
+              const maxRev = topBrands[0].revenue;
+              const pct    = maxRev > 0 ? (brand.revenue / maxRev) * 100 : 0;
+              const medals = ["🥇","🥈","🥉"];
+              return (
+                <div key={brand.name} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5 text-[var(--foreground)]">
+                      <span className="text-base leading-none">{medals[i] ?? `${i + 1}.`}</span>
+                      {brand.name}
+                    </span>
+                    <div className="text-right">
+                      <span className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(brand.revenue)}</span>
+                      <span className="text-xs text-[var(--muted-foreground)] ml-2">{brand.items} {brand.items === 1 ? "artículo" : "artículos"}</span>
                     </div>
                   </div>
                   <div className="h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
