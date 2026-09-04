@@ -199,22 +199,32 @@ function useTopBrands(start: string | null, end: string | null) {
     queryKey: ["dashboard-top-brands", start, end],
     queryFn: async () => {
       const supabase = createClient();
-      let q = supabase
+
+      // Query completed sales in the period first, then get their items
+      let salesQ = supabase
+        .from("sales")
+        .select("id")
+        .eq("status", "completed");
+      if (start) salesQ = salesQ.gte("created_at", `${start}T00:00:00-07:00`);
+      if (end)   salesQ = salesQ.lte("created_at", `${end}T23:59:59-07:00`);
+
+      const { data: sales, error: salesErr } = await salesQ;
+      if (salesErr) throw salesErr;
+      if (!sales || sales.length === 0) return [];
+
+      const saleIds = sales.map((s) => s.id);
+
+      const { data, error } = await supabase
         .from("sale_items")
-        .select("brand_amount, store_amount, sale:sales(status, created_at), brand:brands(id, name)")
+        .select("brand_amount, store_amount, brand:brands(id, name)")
+        .in("sale_id", saleIds)
         .not("brand_id", "is", null);
-
-      if (start) q = (q as any).gte("sale.created_at", `${start}T00:00:00-07:00`);
-      if (end)   q = (q as any).lte("sale.created_at", `${end}T23:59:59-07:00`);
-
-      const { data, error } = await q;
       if (error) throw error;
 
       const map = new Map<string, { name: string; revenue: number; items: number }>();
       for (const item of data ?? []) {
-        const sale  = (item as any).sale;
         const brand = (item as any).brand;
-        if (!brand || sale?.status !== "completed") continue;
+        if (!brand) continue;
         const amount = Number(item.brand_amount) + Number(item.store_amount);
         const ex = map.get(brand.id);
         if (ex) { ex.revenue += amount; ex.items += 1; }
