@@ -16,8 +16,8 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
-  if (caller?.role !== "admin") {
-    return NextResponse.json({ error: "Solo admins pueden crear empleados" }, { status: 403 });
+  if (caller?.role !== "admin" && caller?.role !== "god") {
+    return NextResponse.json({ error: "Solo admins y god pueden crear empleados" }, { status: 403 });
   }
 
   const body = await request.json();
