@@ -62,7 +62,7 @@ export default function ProductoDetallePage({
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="px-4 py-6 max-w-4xl mx-auto">
       <button
         onClick={() => router.back()}
         className="flex items-center gap-1.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] mb-6 transition-colors"
@@ -72,38 +72,62 @@ export default function ProductoDetallePage({
       </button>
 
       {/* Header del producto */}
-      <div className="flex gap-5 mb-6">
+      <div className="flex gap-4 mb-6">
         {producto.photo_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={producto.photo_url}
             alt={producto.name}
-            className="w-28 h-28 rounded-xl object-cover border border-[var(--border)] flex-shrink-0"
+            className="w-20 h-20 sm:w-28 sm:h-28 rounded-xl object-cover border border-[var(--border)] flex-shrink-0"
           />
         ) : (
-          <div className="w-28 h-28 rounded-xl bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
-            <Tag size={32} className="text-[var(--muted-foreground)] opacity-40" />
+          <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-xl bg-[var(--muted)] border border-[var(--border)] flex items-center justify-center flex-shrink-0">
+            <Tag size={28} className="text-[var(--muted-foreground)] opacity-40" />
           </div>
         )}
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">{producto.name}</h1>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="font-mono text-sm text-[var(--muted-foreground)] bg-[var(--muted)] px-2 py-0.5 rounded">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-[var(--foreground)] truncate">{producto.name}</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <span className="font-mono text-xs text-[var(--muted-foreground)] bg-[var(--muted)] px-2 py-0.5 rounded">
               {producto.sku_prefix}
             </span>
-            <span className="text-sm text-[var(--muted-foreground)]">{producto.category}</span>
+            <span className="text-xs text-[var(--muted-foreground)]">{producto.category}</span>
             {producto.brand?.name && (
-              <span className="text-sm text-[var(--muted-foreground)]">· {producto.brand.name}</span>
+              <span className="text-xs text-[var(--muted-foreground)]">· {producto.brand.name}</span>
             )}
           </div>
-          <div className="mt-2 text-lg font-semibold text-[var(--foreground)]">
+          <div className="mt-1.5 text-base sm:text-lg font-semibold text-[var(--foreground)]">
             {formatCurrency(producto.base_price)}
           </div>
           {producto.description && (
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">{producto.description}</p>
+            <p className="text-xs text-[var(--muted-foreground)] mt-1 line-clamp-2">{producto.description}</p>
           )}
+          {/* Action buttons below info on mobile */}
+          <div className="flex gap-2 mt-3 sm:hidden">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => router.push(`/etiquetas?skus=${variants.map((v) => v.sku).join(",")}`)}
+            >
+              <Tag size={13} />
+              Etiquetas
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setEditingProduct(true)}>
+              <Pencil size={13} />
+              Editar
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              className="text-[var(--destructive)] hover:bg-red-50"
+            >
+              <Trash2 size={13} />
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-shrink-0 items-start">
+        {/* Action buttons on the right on desktop */}
+        <div className="hidden sm:flex gap-2 flex-shrink-0 items-start">
           <Button
             variant="secondary"
             size="sm"
@@ -112,11 +136,7 @@ export default function ProductoDetallePage({
             <Tag size={14} />
             Etiquetas
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setEditingProduct(true)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => setEditingProduct(true)}>
             <Pencil size={14} />
             Editar
           </Button>
@@ -131,7 +151,7 @@ export default function ProductoDetallePage({
         </div>
       </div>
 
-      {/* Tabla de variantes */}
+      {/* Variantes header */}
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-[var(--foreground)]">
           Variantes ({variants.length})
@@ -142,7 +162,8 @@ export default function ProductoDetallePage({
         </Button>
       </div>
 
-      <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
+      {/* Desktop table */}
+      <div className="hidden sm:block bg-[var(--card)] rounded-xl border border-[var(--border)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
@@ -201,6 +222,47 @@ export default function ProductoDetallePage({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="sm:hidden flex flex-col gap-2">
+        {variants.length === 0 && (
+          <p className="text-center text-sm text-[var(--muted-foreground)] py-8">Sin variantes activas</p>
+        )}
+        {variants.map((v) => (
+          <div key={v.id} className="bg-[var(--card)] rounded-xl border border-[var(--border)] px-4 py-3 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono text-xs text-[var(--muted-foreground)]">{v.sku}</span>
+                <StockBadge status={getStockStatus(v)} />
+              </div>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {v.size && <span className="text-sm text-[var(--foreground)]">{v.size}</span>}
+                {v.color && <span className="text-sm text-[var(--muted-foreground)]">{v.color}</span>}
+                <span className="text-sm font-medium text-[var(--foreground)]">
+                  {v.price != null ? formatCurrency(v.price) : formatCurrency(producto.base_price)}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <InlineStockEdit
+                value={v.stock}
+                onSave={(stock) => updateVariante.mutate({ id: v.id, data: { stock } })}
+              />
+              <Button size="sm" variant="ghost" onClick={() => setEditingVariant(v)}>
+                <Pencil size={13} />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setDeletingVariantId(v.id)}
+                className="text-[var(--destructive)] hover:bg-red-50"
+              >
+                <Trash2 size={13} />
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Modal editar producto */}
