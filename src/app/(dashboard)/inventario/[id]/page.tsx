@@ -276,6 +276,14 @@ export default function ProductoDetallePage({
           producto={producto}
           onSave={async (data, photoFile) => {
             await updateProducto.mutateAsync({ data, photoFile });
+            // Cascade new base_price to all variants
+            if (data.base_price != null && data.base_price !== producto.base_price) {
+              await Promise.all(
+                variants.map((v) =>
+                  updateVariante.mutateAsync({ id: v.id, data: { price: data.base_price } })
+                )
+              );
+            }
             setEditingProduct(false);
           }}
           onCancel={() => setEditingProduct(false)}
