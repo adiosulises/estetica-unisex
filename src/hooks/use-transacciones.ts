@@ -170,6 +170,9 @@ interface CreateTransactionPayload {
   performed_by: string;
   transaction_date: string; // YYYY-MM-DD
   notes?: string;
+  paid_cash?: number;
+  paid_card?: number;
+  paid_transfer?: number;
 }
 
 export function useCreateSpendingTransaction() {
@@ -184,13 +187,18 @@ export function useCreateSpendingTransaction() {
         p_performed_by:     p.performed_by,
         p_transaction_date: p.transaction_date,
         p_notes:            p.notes ?? undefined,
+        p_paid_cash:        p.paid_cash ?? 0,
+        p_paid_card:        p.paid_card ?? 0,
+        p_paid_transfer:    p.paid_transfer ?? 0,
       });
       if (error) throw error;
-      return data as string; // uuid of new transaction
+      return data as string;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spending-transactions"] });
       qc.invalidateQueries({ queryKey: ["category-balances"] });
+      qc.invalidateQueries({ queryKey: ["caja-movements-today"] });
+      qc.invalidateQueries({ queryKey: ["caja-today"] });
     },
   });
 }

@@ -412,6 +412,9 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
 
   const [category, setCategory] = useState<CategoryKey>("salary");
   const [amount, setAmount] = useState("");
+  const [paidCash, setPaidCash] = useState("");
+  const [paidCard, setPaidCard] = useState("");
+  const [paidTransfer, setPaidTransfer] = useState("");
   const [concept, setConcept] = useState("");
   const [performedBy, setPerformedBy] = useState("");
   const [date, setDate] = useState(today);
@@ -424,13 +427,27 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
   const { data: balances = [] } = useCategoryBalances();
 
   const catBalance = balances.find((b) => b.category === category)?.balance ?? 0;
-  const amountNum = parseFloat(amount);
+  const amountNum       = parseFloat(amount) || 0;
+  const paidCashNum     = parseFloat(paidCash) || 0;
+  const paidCardNum     = parseFloat(paidCard) || 0;
+  const paidTransferNum = parseFloat(paidTransfer) || 0;
+  const paidTotal       = paidCashNum + paidCardNum + paidTransferNum;
+  const paidMismatch    = amountNum > 0 && Math.abs(paidTotal - amountNum) > 0.01;
+
+  // Auto-fill cash when user sets amount and hasn't touched payment fields
+  function handleAmountChange(v: string) {
+    setAmount(v);
+    if (!paidCash && !paidCard && !paidTransfer) {
+      setPaidCash(v);
+    }
+  }
 
   async function handleSave() {
     setErr(null);
     if (!concept.trim()) { setErr("El concepto es requerido"); return; }
     if (!performedBy.trim()) { setErr("Indica quién realiza la transacción"); return; }
-    if (isNaN(amountNum) || amountNum <= 0) { setErr("El monto debe ser mayor a 0"); return; }
+    if (amountNum <= 0) { setErr("El monto debe ser mayor a 0"); return; }
+    if (paidMismatch) { setErr(`La suma de pagos (${formatCurrency(paidTotal)}) no coincide con el monto (${formatCurrency(amountNum)})`); return; }
 
     setSaving(true);
     try {
@@ -441,6 +458,9 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
         performed_by: performedBy.trim(),
         transaction_date: date,
         notes: notes.trim() || undefined,
+        paid_cash:     paidCashNum,
+        paid_card:     paidCardNum,
+        paid_transfer: paidTransferNum,
       });
       onClose();
     } catch (e) {
@@ -483,15 +503,65 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <Input
-        label="Monto ($)"
+        label="Monto total ($)"
         type="number"
         step="0.01"
         min="0.01"
         value={amount}
-        onChange={(e) => setAmount(e.target.value)}
+        onChange={(e) => handleAmountChange(e.target.value)}
         placeholder="0.00"
-        hint={!isNaN(amountNum) && amountNum > catBalance ? "⚠ Excede el saldo disponible" : undefined}
+        hint={amountNum > 0 && amountNum > catBalance ? "⚠ Excede el saldo disponible" : undefined}
       />
+
+      {/* Payment breakdown — deducted from register */}
+      <div>
+        <label className="text-xs text-[var(--muted-foreground)] mb-1.5 block">
+          ¿Cómo se pagó? <span className="text-[var(--muted-foreground)]/60">(se descuenta de la caja)</span>
+        </label>
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="text-[10px] text-green-600 font-medium mb-1 block">Efectivo</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={paidCash}
+              onChange={(e) => setPaidCash(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-blue-600 font-medium mb-1 block">Tarjeta</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={paidCard}
+              onChange={(e) => setPaidCard(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] text-purple-600 font-medium mb-1 block">Transferencia</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={paidTransfer}
+              onChange={(e) => setPaidTransfer(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+        </div>
+        {paidTotal > 0 && (
+          <p className={`text-xs mt-1.5 ${paidMismatch ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"}`}>
+            Suma: {formatCurrency(paidTotal)}{paidMismatch ? ` — debe ser ${formatCurrency(amountNum)}` : " ✓"}
+          </p>
+        )}
+      </div>
 
       <Input
         label="Concepto"
