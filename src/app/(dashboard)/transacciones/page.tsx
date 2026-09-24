@@ -412,8 +412,9 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
 
   const [category, setCategory] = useState<CategoryKey>("salary");
   const [amount, setAmount] = useState("");
+  const [useCash, setUseCash] = useState(true);
+  const [useTransfer, setUseTransfer] = useState(false);
   const [paidCash, setPaidCash] = useState("");
-  const [paidCard, setPaidCard] = useState("");
   const [paidTransfer, setPaidTransfer] = useState("");
   const [concept, setConcept] = useState("");
   const [performedBy, setPerformedBy] = useState("");
@@ -426,20 +427,21 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
   const create = useCreateSpendingTransaction();
   const { data: balances = [] } = useCategoryBalances();
 
-  const catBalance = balances.find((b) => b.category === category)?.balance ?? 0;
-  const amountNum       = parseFloat(amount) || 0;
-  const paidCashNum     = parseFloat(paidCash) || 0;
-  const paidCardNum     = parseFloat(paidCard) || 0;
-  const paidTransferNum = parseFloat(paidTransfer) || 0;
-  const paidTotal       = paidCashNum + paidCardNum + paidTransferNum;
-  const paidMismatch    = amountNum > 0 && Math.abs(paidTotal - amountNum) > 0.01;
+  const catBalance  = balances.find((b) => b.category === category)?.balance ?? 0;
+  const amountNum   = parseFloat(amount) || 0;
+  const bothMethods = useCash && useTransfer;
+  const paidCashNum     = bothMethods ? (parseFloat(paidCash) || 0) : (useCash ? amountNum : 0);
+  const paidTransferNum = bothMethods ? (parseFloat(paidTransfer) || 0) : (useTransfer ? amountNum : 0);
+  const paidTotal       = paidCashNum + paidTransferNum;
+  const paidMismatch    = bothMethods && amountNum > 0 && Math.abs(paidTotal - amountNum) > 0.01;
 
-  // Auto-fill cash when user sets amount and hasn't touched payment fields
-  function handleAmountChange(v: string) {
-    setAmount(v);
-    if (!paidCash && !paidCard && !paidTransfer) {
-      setPaidCash(v);
-    }
+  function toggleCash() {
+    if (useCash && !useTransfer) return; // at least one must stay
+    setUseCash((v) => !v);
+  }
+  function toggleTransfer() {
+    if (useTransfer && !useCash) return;
+    setUseTransfer((v) => !v);
   }
 
   async function handleSave() {
@@ -447,7 +449,8 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
     if (!concept.trim()) { setErr("El concepto es requerido"); return; }
     if (!performedBy.trim()) { setErr("Indica quién realiza la transacción"); return; }
     if (amountNum <= 0) { setErr("El monto debe ser mayor a 0"); return; }
-    if (paidMismatch) { setErr(`La suma de pagos (${formatCurrency(paidTotal)}) no coincide con el monto (${formatCurrency(amountNum)})`); return; }
+    if (paidMismatch) { setErr(`La suma (${formatCurrency(paidTotal)}) no coincide con el monto (${formatCurrency(amountNum)})`); return; }
+    if (bothMethods && paidTotal === 0) { setErr("Ingresa los montos por método de pago"); return; }
 
     setSaving(true);
     try {
@@ -459,7 +462,7 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
         transaction_date: date,
         notes: notes.trim() || undefined,
         paid_cash:     paidCashNum,
-        paid_card:     paidCardNum,
+        paid_card:     0,
         paid_transfer: paidTransferNum,
       });
       onClose();
@@ -503,63 +506,81 @@ function AddTransactionForm({ onClose }: { onClose: () => void }) {
       </div>
 
       <Input
-        label="Monto total ($)"
+        label="Monto ($)"
         type="number"
         step="0.01"
         min="0.01"
         value={amount}
-        onChange={(e) => handleAmountChange(e.target.value)}
+        onChange={(e) => setAmount(e.target.value)}
         placeholder="0.00"
         hint={amountNum > 0 && amountNum > catBalance ? "⚠ Excede el saldo disponible" : undefined}
       />
 
-      {/* Payment breakdown — deducted from register */}
+      {/* Payment method — deducted from register */}
       <div>
-        <label className="text-xs text-[var(--muted-foreground)] mb-1.5 block">
-          ¿Cómo se pagó? <span className="text-[var(--muted-foreground)]/60">(se descuenta de la caja)</span>
+        <label className="text-xs text-[var(--muted-foreground)] mb-2 block">
+          ¿Cómo se pagó? <span className="opacity-60">(se descuenta de la caja)</span>
         </label>
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="text-[10px] text-green-600 font-medium mb-1 block">Efectivo</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={paidCash}
-              onChange={(e) => setPaidCash(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] text-blue-600 font-medium mb-1 block">Tarjeta</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={paidCard}
-              onChange={(e) => setPaidCard(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] text-purple-600 font-medium mb-1 block">Transferencia</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={paidTransfer}
-              onChange={(e) => setPaidTransfer(e.target.value)}
-              placeholder="0.00"
-              className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={toggleCash}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+              useCash
+                ? "bg-green-500 border-green-500 text-white"
+                : "border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--muted)]"
+            }`}
+          >
+            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${useCash ? "border-white" : "border-current"}`}>
+              {useCash && <span className="w-2 h-2 rounded-sm bg-white" />}
+            </span>
+            Efectivo
+          </button>
+          <button
+            type="button"
+            onClick={toggleTransfer}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors ${
+              useTransfer
+                ? "bg-purple-500 border-purple-500 text-white"
+                : "border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--muted)]"
+            }`}
+          >
+            <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${useTransfer ? "border-white" : "border-current"}`}>
+              {useTransfer && <span className="w-2 h-2 rounded-sm bg-white" />}
+            </span>
+            Transferencia
+          </button>
         </div>
-        {paidTotal > 0 && (
-          <p className={`text-xs mt-1.5 ${paidMismatch ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"}`}>
-            Suma: {formatCurrency(paidTotal)}{paidMismatch ? ` — debe ser ${formatCurrency(amountNum)}` : " ✓"}
-          </p>
+
+        {/* Manual split only when both are selected */}
+        {bothMethods && (
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <div>
+              <label className="text-[10px] text-green-600 font-medium mb-1 block">Efectivo</label>
+              <input
+                type="number" step="0.01" min="0"
+                value={paidCash}
+                onChange={(e) => setPaidCash(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-purple-600 font-medium mb-1 block">Transferencia</label>
+              <input
+                type="number" step="0.01" min="0"
+                value={paidTransfer}
+                onChange={(e) => setPaidTransfer(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            {paidTotal > 0 && (
+              <p className={`col-span-2 text-xs ${paidMismatch ? "text-[var(--destructive)]" : "text-[var(--muted-foreground)]"}`}>
+                Suma: {formatCurrency(paidTotal)}{paidMismatch ? ` — debe ser ${formatCurrency(amountNum)}` : " ✓"}
+              </p>
+            )}
+          </div>
         )}
       </div>
 
