@@ -36,7 +36,6 @@ export default function PosPage() {
     setCart((prev) => {
       const existing = prev.find((c) => c.variantId === v.id);
       if (existing) {
-        if (existing.quantity >= existing.stock) return prev;
         return prev.map((c) =>
           c.variantId === v.id ? { ...c, quantity: c.quantity + 1 } : c
         );
@@ -66,7 +65,7 @@ export default function PosPage() {
     setCart((prev) =>
       prev.map((c) =>
         c.variantId === variantId
-          ? { ...c, quantity: Math.min(c.stock, Math.max(1, c.quantity + delta)) }
+          ? { ...c, quantity: Math.max(1, c.quantity + delta) }
           : c
       )
     );
@@ -554,7 +553,7 @@ function CartItemRow({
           </span>
           <button
             onClick={() => onQtyChange(+1)}
-            disabled={item.quantity >= item.stock}
+            disabled={false}
             className="w-6 h-6 rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--foreground)] hover:bg-[var(--muted)] transition-colors disabled:opacity-30"
           >
             <Plus size={11} />
