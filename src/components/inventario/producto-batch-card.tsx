@@ -30,6 +30,7 @@ interface Props {
   onPhotoChange: (index: number, file: File | null) => void;
   onRemove: () => void;
   canRemove: boolean;
+  hideBrandSelector?: boolean;
 }
 
 export function ProductoBatchCard({
@@ -40,6 +41,7 @@ export function ProductoBatchCard({
   onPhotoChange,
   onRemove,
   canRemove,
+  hideBrandSelector = false,
 }: Props) {
   const [open, setOpen] = useState(true);
   const [addingConsig, setAddingConsig] = useState(false);
@@ -165,17 +167,19 @@ export function ProductoBatchCard({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Select
-                  id={`products.${index}.brand_id`}
-                  label="Marca"
-                  error={productErrors?.brand_id?.message}
-                  {...register(`products.${index}.brand_id`)}
-                >
-                  <option value="">— Sin marca —</option>
-                  {marcas.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </Select>
+                {!hideBrandSelector && (
+                  <Select
+                    id={`products.${index}.brand_id`}
+                    label="Marca"
+                    error={productErrors?.brand_id?.message}
+                    {...register(`products.${index}.brand_id`)}
+                  >
+                    <option value="">— Sin marca —</option>
+                    {marcas.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </Select>
+                )}
 
                 <Select
                   id={`products.${index}.category`}

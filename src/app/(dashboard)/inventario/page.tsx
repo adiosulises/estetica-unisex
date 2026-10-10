@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Package, Tag, X } from "lucide-react";
+import { Plus, Search, Package, Tag, X, Store } from "lucide-react";
 import { useProductos } from "@/hooks/use-productos";
 import { useMarcas } from "@/hooks/use-marcas";
 import { StockBadge } from "@/components/inventario/stock-badge";
@@ -101,6 +101,12 @@ export default function InventarioPage() {
               Etiquetas
             </Button>
           )}
+          <Link href="/inventario/entrada-marca">
+            <Button variant="secondary" size="sm">
+              <Store size={15} />
+              Por marca
+            </Button>
+          </Link>
           <Link href="/inventario/nuevo">
             <Button size="sm">
               <Plus size={16} />
