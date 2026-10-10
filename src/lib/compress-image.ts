@@ -1,85 +1,51 @@
 interface CompressOptions {
   maxWidth?: number;
   maxHeight?: number;
-  quality?: number; // 0–1
-  maxSizeKB?: number; // intenta reducir calidad hasta llegar a este tamaño
+  maxSizeKB?: number;
+  quality?: number;
 }
 
-export async function compressImage(
-  file: File,
-  options: CompressOptions = {}
-): Promise<File> {
-  const {
-    maxWidth = 1200,
-    maxHeight = 1200,
-    quality = 0.82,
-    maxSizeKB = 300,
-  } = options;
+export function compressImage(file: File, options: CompressOptions | number = {}): Promise<File> {
+  const opts: CompressOptions = typeof options === "number"
+    ? { maxWidth: options, maxHeight: options, quality: 0.65 }
+    : options;
+
+  const maxWidth  = opts.maxWidth  ?? 800;
+  const maxHeight = opts.maxHeight ?? 800;
+  const quality   = opts.quality   ?? 0.65;
 
   return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
     const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-
     img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-
+      URL.revokeObjectURL(url);
       let { width, height } = img;
-
-      // Escalar si excede las dimensiones máximas
       if (width > maxWidth || height > maxHeight) {
-        const ratio = Math.min(maxWidth / width, maxHeight / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
+        const scale = Math.min(maxWidth / width, maxHeight / height);
+        width  = Math.round(width  * scale);
+        height = Math.round(height * scale);
       }
-
       const canvas = document.createElement("canvas");
-      canvas.width = width;
+      canvas.width  = width;
       canvas.height = height;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas no disponible"));
-        return;
-      }
-
+      const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0, width, height);
-
-      // Reducir calidad iterativamente si sigue siendo muy grande
-      const tryCompress = (q: number) => {
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error("Error al comprimir imagen"));
-              return;
-            }
-            const sizeKB = blob.size / 1024;
-            if (sizeKB > maxSizeKB && q > 0.3) {
-              tryCompress(q - 0.1);
-            } else {
-              const ext = file.name.includes(".") ? "jpg" : file.name;
-              const name = file.name.replace(/\.[^.]+$/, ".jpg") || ext;
-              resolve(new File([blob], name, { type: "image/jpeg", lastModified: Date.now() }));
-            }
-          },
-          "image/jpeg",
-          q
-        );
-      };
-
-      tryCompress(quality);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error("Canvas toBlob failed")); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        quality
+      );
     };
-
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("No se pudo cargar la imagen"));
-    };
-
-    img.src = objectUrl;
+    img.onerror = reject;
+    img.src = url;
   });
 }
 
 export function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024)       return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

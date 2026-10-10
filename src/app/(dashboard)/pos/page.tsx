@@ -110,7 +110,6 @@ export default function PosPage() {
       .select("id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))")
       .eq("sku", sku)
       .eq("is_active", true)
-      .gt("stock", 0)
       .maybeSingle();
 
     if (error || !data) return;
@@ -415,12 +414,16 @@ function VarianteCard({
   const price = variante.price ?? variante.basePrice;
   const attrs = [variante.size, variante.color].filter(Boolean).join(" · ");
 
+  const outOfStock = variante.stock <= 0;
+
   return (
     <button
       onClick={onClick}
       className={`text-left rounded-xl border p-3 flex gap-2.5 transition-all hover:shadow-md active:scale-[0.98] ${
         inCart > 0
           ? "border-[var(--primary)] bg-[var(--primary)]/5"
+          : outOfStock
+          ? "border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-950/20"
           : "border-[var(--border)] bg-[var(--background)] hover:border-[var(--primary)]/50"
       }`}
     >
@@ -444,8 +447,8 @@ function VarianteCard({
         )}
         <div className="flex items-center justify-between mt-1">
           <span className="text-sm font-bold text-[var(--foreground)]">{formatCurrency(price)}</span>
-          <span className="text-xs text-[var(--muted-foreground)]">
-            stock: {variante.stock}
+          <span className={`text-xs font-medium ${outOfStock ? "text-red-500" : "text-[var(--muted-foreground)]"}`}>
+            {outOfStock ? "Sin stock" : `stock: ${variante.stock}`}
             {inCart > 0 && <span className="ml-1 text-[var(--primary)] font-semibold">+{inCart}</span>}
           </span>
         </div>

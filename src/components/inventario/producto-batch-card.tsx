@@ -154,22 +154,13 @@ export function ProductoBatchCard({
 
           {/* Datos principales */}
           <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <Input
                   id={`products.${index}.name`}
                   label="Nombre del producto *"
-                  placeholder="Ej. Tora Tee"
+                  placeholder="Nombre del artículo"
                   error={productErrors?.name?.message}
                   {...register(`products.${index}.name`)}
-                />
-                <Input
-                  id={`products.${index}.sku_prefix`}
-                  label="Prefijo SKU *"
-                  placeholder="Ej. TT"
-                  maxLength={6}
-                  hint="2–6 chars, solo letras/números"
-                  error={productErrors?.sku_prefix?.message}
-                  {...register(`products.${index}.sku_prefix`)}
                 />
               </div>
 

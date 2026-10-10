@@ -23,7 +23,7 @@ const DEFAULT_PRODUCT: BatchFormValues["products"][0] = {
   production_paid_by: "none",
   production_paid_by_employee_id: "",
   production_notes: "",
-  variants: [{ size: "M", color: "Negro", stock: 1, low_stock_threshold: 0 }],
+  variants: [],
 };
 
 export default function NuevoBatchPage() {

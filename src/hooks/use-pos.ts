@@ -27,90 +27,68 @@ export function useSearchVariantes(query: string) {
       const supabase = createClient();
       const q = debouncedQuery.trim();
 
-      // Buscar por SKU
-      const skuPromise = supabase
-        .from("product_variants")
-        .select(
-          "id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
-        )
-        .ilike("sku", `%${q}%`)
-        .eq("is_active", true)
-        .gt("stock", 0)
-        .limit(12);
-
-      // Buscar productos por nombre → traer sus variantes
-      const namePromise = supabase
-        .from("products")
-        .select("id")
-        .ilike("name", `%${q}%`)
-        .eq("is_active", true)
-        .is("deleted_at", null)
-        .limit(6);
-
-      const [skuRes, nameRes] = await Promise.all([skuPromise, namePromise]);
-
-      if (skuRes.error) throw skuRes.error;
-
       type RawVariant = {
-        id: string;
-        sku: string;
-        size: string | null;
-        color: string | null;
-        price: number | null;
-        stock: number;
-        product: {
-          id: string;
-          name: string;
-          base_price: number;
-          photo_url: string | null;
-          brand: { name: string } | null;
-        } | null;
+        id: string; sku: string; size: string | null; color: string | null;
+        price: number | null; stock: number;
+        product: { id: string; name: string; base_price: number; photo_url: string | null; brand: { name: string } | null } | null;
       };
 
       const normalize = (v: RawVariant): VarianteSearchResult => ({
-        id: v.id,
-        sku: v.sku,
-        size: v.size,
-        color: v.color,
-        price: v.price,
-        stock: v.stock,
-        productId: v.product?.id ?? "",
-        productName: v.product?.name ?? "",
-        basePrice: v.product?.base_price ?? 0,
-        photoUrl: v.product?.photo_url ?? null,
+        id: v.id, sku: v.sku, size: v.size, color: v.color, price: v.price, stock: v.stock,
+        productId: v.product?.id ?? "", productName: v.product?.name ?? "",
+        basePrice: v.product?.base_price ?? 0, photoUrl: v.product?.photo_url ?? null,
         brandName: v.product?.brand?.name ?? null,
       });
 
-      const bySkuResults = (skuRes.data ?? []).map((v) =>
-        normalize(v as RawVariant)
-      );
+      const variantSelect = "id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))";
 
-      // Si hay productos por nombre, buscar sus variantes
-      const productIds = (nameRes.data ?? []).map((p) => p.id);
-      if (productIds.length === 0) return bySkuResults;
-
-      const { data: byNameData, error: nameVarErr } = await supabase
+      // Search by SKU — include out-of-stock
+      const skuPromise = supabase
         .from("product_variants")
-        .select(
-          "id, sku, size, color, price, stock, product:products(id, name, base_price, photo_url, brand:brands(name))"
-        )
-        .in("product_id", productIds)
+        .select(variantSelect)
+        .ilike("sku", `%${q}%`)
         .eq("is_active", true)
-        .gt("stock", 0)
-        .limit(12);
+        .limit(15);
 
-      if (nameVarErr) throw nameVarErr;
+      // Search products by name — split words for broader matching
+      const words = q.split(/\s+/).filter(Boolean);
+      const namePromise = supabase
+        .from("products")
+        .select("id")
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .or(words.map((w) => `name.ilike.%${w}%`).join(","))
+        .limit(8);
 
-      // Merge deduplicado (SKU primero)
-      const seen = new Set(bySkuResults.map((v) => v.id));
-      const merged = [
-        ...bySkuResults,
-        ...(byNameData ?? [])
-          .map((v) => normalize(v as RawVariant))
-          .filter((v) => !seen.has(v.id)),
-      ];
+      const [skuRes, nameRes] = await Promise.all([skuPromise, namePromise]);
+      if (skuRes.error) throw skuRes.error;
 
-      return merged.slice(0, 20);
+      const bySkuResults = (skuRes.data ?? []).map((v) => normalize(v as RawVariant));
+
+      const productIds = (nameRes.data ?? []).map((p) => p.id);
+      let byNameResults: VarianteSearchResult[] = [];
+
+      if (productIds.length > 0) {
+        const { data: byNameData, error: nameVarErr } = await supabase
+          .from("product_variants")
+          .select(variantSelect)
+          .in("product_id", productIds)
+          .eq("is_active", true)
+          .limit(15);
+        if (nameVarErr) throw nameVarErr;
+        byNameResults = (byNameData ?? []).map((v) => normalize(v as RawVariant));
+      }
+
+      // Deduplicate, in-stock first then out-of-stock
+      const seen = new Set<string>();
+      const all: VarianteSearchResult[] = [];
+      for (const v of [...bySkuResults, ...byNameResults]) {
+        if (!seen.has(v.id)) { seen.add(v.id); all.push(v); }
+      }
+
+      const inStock  = all.filter((v) => v.stock > 0);
+      const outStock = all.filter((v) => v.stock <= 0);
+      return [...inStock, ...outStock].slice(0, 24);
     },
     enabled: debouncedQuery.trim().length > 0,
     staleTime: 10_000,

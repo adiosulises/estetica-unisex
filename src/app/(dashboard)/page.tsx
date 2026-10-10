@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   TrendingUp, ShoppingCart, Banknote,
   AlertTriangle, ArrowRight, Package, Target, Users, BarChart2,
+  Tag, TrendingDown, Layers,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
@@ -277,6 +278,109 @@ function useMonthlyHistory() {
   });
 }
 
+function useInventoryValue() {
+  return useQuery({
+    queryKey: ["dashboard-inventory-value"],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("stock, price")
+        .eq("is_active", true);
+      if (error) throw error;
+      return (data ?? []).reduce((s, v) => s + (v.stock ?? 0) * (v.price ?? 0), 0);
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+function useCategoryPerf(start: string | null, end: string | null) {
+  return useQuery({
+    queryKey: ["dashboard-category-perf", start, end],
+    queryFn: async () => {
+      const supabase = createClient();
+
+      let salesQ = supabase.from("sales").select("id").eq("status", "completed");
+      if (start) salesQ = salesQ.gte("created_at", `${start}T00:00:00-07:00`);
+      if (end)   salesQ = salesQ.lte("created_at", `${end}T23:59:59-07:00`);
+      const { data: sales, error: salesErr } = await salesQ;
+      if (salesErr) throw salesErr;
+      if (!sales || sales.length === 0) return [];
+
+      const saleIds = sales.map((s) => s.id);
+      const { data, error } = await supabase
+        .from("sale_items")
+        .select("brand_amount, store_amount, product:products(category)")
+        .in("sale_id", saleIds);
+      if (error) throw error;
+
+      const map = new Map<string, { revenue: number; items: number }>();
+      for (const item of data ?? []) {
+        const cat = (item as any).product?.category ?? "Sin categoría";
+        const amount = Number(item.brand_amount) + Number(item.store_amount);
+        const ex = map.get(cat);
+        if (ex) { ex.revenue += amount; ex.items += 1; }
+        else map.set(cat, { revenue: amount, items: 1 });
+      }
+      return Array.from(map.entries())
+        .map(([category, v]) => ({ category, ...v }))
+        .sort((a, b) => b.revenue - a.revenue);
+    },
+    staleTime: 60_000,
+  });
+}
+
+function useUnderperformingBrands() {
+  return useQuery({
+    queryKey: ["dashboard-underperforming-brands"],
+    queryFn: async () => {
+      const supabase = createClient();
+
+      // All brands that have at least one active product
+      const { data: brands, error: brandsErr } = await supabase
+        .from("brands")
+        .select("id, name")
+        .eq("is_active", true);
+      if (brandsErr) throw brandsErr;
+
+      // Last sale for each brand via sale_items
+      const { data: lastSales, error: lastErr } = await supabase
+        .from("sale_items")
+        .select("brand_id, sale:sales(created_at, status)")
+        .not("brand_id", "is", null)
+        .order("created_at", { referencedTable: "sales", ascending: false });
+      if (lastErr) throw lastErr;
+
+      const lastSaleMap = new Map<string, string>();
+      for (const item of lastSales ?? []) {
+        const saleData = (item as any).sale;
+        if (!saleData || saleData.status !== "completed") continue;
+        if (!lastSaleMap.has(item.brand_id!)) {
+          lastSaleMap.set(item.brand_id!, saleData.created_at);
+        }
+      }
+
+      const now = Date.now();
+      return (brands ?? [])
+        .map((b) => {
+          const lastAt = lastSaleMap.get(b.id);
+          const daysSince = lastAt
+            ? Math.floor((now - new Date(lastAt).getTime()) / 86_400_000)
+            : null;
+          return { id: b.id, name: b.name, lastAt, daysSince };
+        })
+        .sort((a, b) => {
+          if (a.daysSince === null && b.daysSince === null) return 0;
+          if (a.daysSince === null) return -1;
+          if (b.daysSince === null) return -1;
+          return b.daysSince - a.daysSince;
+        })
+        .filter((b) => b.daysSince === null || b.daysSince > 14);
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 function useDashboardRealtime() {
   const qc = useQueryClient();
   useEffect(() => {
@@ -329,6 +433,26 @@ export default function DashboardPage() {
     };
   })();
   const { data: topEmployees = [] } = useTopEmployees(empPeriod.start, empPeriod.end);
+
+  const { data: inventoryValue = 0 } = useInventoryValue();
+  const { data: underperforming = [] } = useUnderperformingBrands();
+
+  // Category performance: month nav
+  const [catMonthOffset, setCatMonthOffset] = useState<number | "all">(0);
+  const catPeriod = (() => {
+    if (catMonthOffset === "all") return { start: null, end: null, label: "Todo el tiempo" };
+    if (catMonthOffset === 0) return { start: periodStart, end: todayLocal(), label: "Período actual" };
+    const now = new Date(new Date().toLocaleString("en-US", { timeZone: TZ }));
+    const d   = new Date(now.getFullYear(), now.getMonth() + (catMonthOffset as number), 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const label = d.toLocaleDateString("es-MX", { month: "long", year: "numeric", timeZone: TZ });
+    return {
+      start: d.toLocaleDateString("en-CA", { timeZone: TZ }),
+      end:   end.toLocaleDateString("en-CA", { timeZone: TZ }),
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+    };
+  })();
+  const { data: categoryPerf = [] } = useCategoryPerf(catPeriod.start, catPeriod.end);
 
   // Top brands: all-time or month navigation
   const [brandMonthOffset, setBrandMonthOffset] = useState<number | "all">(0);
@@ -407,6 +531,13 @@ export default function DashboardPage() {
           icon={<AlertTriangle size={18} />}
           color={lowStock.length > 0 ? "red" : "muted"}
           href="/inventario"
+        />
+        <StatCard
+          label="Valor inventario"
+          value={formatCurrency(inventoryValue)}
+          sub="si vendieras todo"
+          icon={<Layers size={18} />}
+          color="primary"
         />
       </div>
 
@@ -582,6 +713,93 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* ── Category performance ───────────────────────────────────────────── */}
+      <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Tag size={15} className="text-[var(--primary)]" />
+            <p className="text-sm font-semibold text-[var(--foreground)]">Rendimiento por categoría</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCatMonthOffset((o) => o === "all" ? 0 : (o as number) - 1)}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs"
+            >‹</button>
+            <button
+              onClick={() => setCatMonthOffset("all")}
+              className={`px-2 py-0.5 rounded-lg text-xs border transition-colors ${catMonthOffset === "all" ? "bg-[var(--primary)] text-white border-[var(--primary)]" : "border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)]"}`}
+            >
+              Todo
+            </button>
+            <span className="text-xs text-[var(--muted-foreground)] min-w-24 text-center capitalize">
+              {catMonthOffset !== "all" && catPeriod.label}
+            </span>
+            <button
+              onClick={() => setCatMonthOffset((o) => o === "all" ? 0 : Math.min(0, (o as number) + 1))}
+              disabled={catMonthOffset === 0 || catMonthOffset === "all"}
+              className="w-6 h-6 flex items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--muted)] transition-colors text-xs disabled:opacity-30"
+            >›</button>
+          </div>
+        </div>
+        {categoryPerf.length === 0 ? (
+          <p className="text-sm text-[var(--muted-foreground)] text-center py-4">Sin ventas en este período</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {categoryPerf.map((cat, i) => {
+              const maxRev = categoryPerf[0].revenue;
+              const pct    = maxRev > 0 ? (cat.revenue / maxRev) * 100 : 0;
+              const medals = ["🥇","🥈","🥉"];
+              return (
+                <div key={cat.category} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5 text-[var(--foreground)]">
+                      <span className="text-base leading-none">{medals[i] ?? `${i + 1}.`}</span>
+                      {cat.category}
+                    </span>
+                    <div className="text-right">
+                      <span className="font-bold font-mono text-[var(--foreground)]">{formatCurrency(cat.revenue)}</span>
+                      <span className="text-xs text-[var(--muted-foreground)] ml-2">{cat.items} {cat.items === 1 ? "artículo" : "artículos"}</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-[var(--muted)] rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-[var(--primary)] rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Negative performance ───────────────────────────────────────────── */}
+      {underperforming.length > 0 && (
+        <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingDown size={15} className="text-red-500" />
+            <p className="text-sm font-semibold text-[var(--foreground)]">Marcas sin movimiento</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {underperforming.slice(0, 8).map((b) => (
+              <div key={b.id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
+                <span className="text-sm text-[var(--foreground)]">{b.name}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  b.daysSince === null
+                    ? "bg-red-100 text-red-600"
+                    : b.daysSince > 30
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-yellow-100 text-yellow-700"
+                }`}>
+                  {b.daysSince === null ? "Nunca ha vendido" : `Hace ${b.daysSince} días`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Monthly history ────────────────────────────────────────────────── */}
       {monthlyHistory.some((m) => m.total > 0) && (
         <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5">
@@ -601,6 +819,7 @@ export default function DashboardPage() {
                       <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[var(--foreground)] text-[var(--background)] text-[10px] px-2 py-1 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                         <p className="font-bold">{formatCurrency(m.total)}</p>
                         <p className="opacity-70">{m.count} {m.count === 1 ? "venta" : "ventas"}</p>
+                        <p className="opacity-70">ticket prom. {formatCurrency(m.count > 0 ? m.total / m.count : 0)}</p>
                       </div>
                     )}
                     <div className="w-full flex items-end justify-center" style={{ height: "88px" }}>

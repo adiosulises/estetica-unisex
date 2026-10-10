@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/compress-image";
 import type { Producto, Variante } from "@/types/inventario";
 import type { ProductoFormValues } from "@/lib/validations/inventario";
 
@@ -67,11 +68,11 @@ export function useCreateBatch() {
         // 1. Upload foto si hay
         let photo_url: string | null = null;
         if (photoFile) {
-          const ext = photoFile.name.split(".").pop();
-          const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const compressed = await compressImage(photoFile);
+          const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
           const { error: upErr } = await supabase.storage
             .from("product-photos")
-            .upload(path, photoFile, { upsert: false });
+            .upload(path, compressed, { upsert: false, contentType: "image/jpeg" });
           if (upErr) throw upErr;
           const { data: urlData } = supabase.storage
             .from("product-photos")
@@ -174,11 +175,11 @@ export function useUpdateProducto(id: string) {
       let photo_url = data.photo_url;
 
       if (photoFile) {
-        const ext = photoFile.name.split(".").pop();
-        const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const compressed = await compressImage(photoFile);
+        const path = `products/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
         const { error: upErr } = await supabase.storage
           .from("product-photos")
-          .upload(path, photoFile, { upsert: false });
+          .upload(path, compressed, { upsert: false, contentType: "image/jpeg" });
         if (upErr) throw upErr;
         const { data: urlData } = supabase.storage
           .from("product-photos")

@@ -41,7 +41,7 @@ export function VariantesInput({ control, productIndex, errors, basePrice }: Var
   }
 
   function addBlank() {
-    append({ size: "M", color: "Negro", price: basePrice || undefined, stock: 1, low_stock_threshold: 0 });
+    append({ size: "", color: "", price: basePrice || undefined, stock: 1, low_stock_threshold: 0 });
   }
 
   const variantErrors = errors?.[productIndex]?.variants;
