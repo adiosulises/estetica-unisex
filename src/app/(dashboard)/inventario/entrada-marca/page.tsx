@@ -190,10 +190,10 @@ export default function EntradaMarcaPage() {
         )}
       </div>
 
-      {!selectedBrandId ? (
+      {!selectedBrandId && !selectedConsigId ? (
         <div className="text-center py-16 text-[var(--muted-foreground)]">
           <Store size={40} className="mx-auto mb-3 opacity-20" />
-          <p className="text-sm">Selecciona una marca para comenzar</p>
+          <p className="text-sm">Selecciona una marca o consignatario para comenzar</p>
         </div>
       ) : (
         <FormProvider {...methods}>
@@ -231,7 +231,7 @@ export default function EntradaMarcaPage() {
               className="w-full"
             >
               <Plus size={15} />
-              Agregar otro artículo de {selectedBrand?.name}
+              Agregar otro artículo{selectedBrand ? ` de ${selectedBrand.name}` : selectedConsig ? ` de ${selectedConsig.name}` : ""}
             </Button>
 
             {createBatch.error && (
@@ -247,7 +247,7 @@ export default function EntradaMarcaPage() {
               <Button type="submit" disabled={createBatch.isPending} size="lg">
                 {createBatch.isPending
                   ? `Guardando ${fields.length} artículo${fields.length > 1 ? "s" : ""}...`
-                  : `Guardar ${fields.length} artículo${fields.length > 1 ? "s" : ""} de ${selectedBrand?.name}`}
+                  : `Guardar ${fields.length} artículo${fields.length > 1 ? "s" : ""}${selectedBrand ? ` de ${selectedBrand.name}` : selectedConsig ? ` de ${selectedConsig.name}` : ""}`}
               </Button>
             </div>
           </form>
