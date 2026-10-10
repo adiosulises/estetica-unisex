@@ -31,6 +31,7 @@ interface Props {
   onRemove: () => void;
   canRemove: boolean;
   hideBrandSelector?: boolean;
+  hideConsigSelector?: boolean;
 }
 
 export function ProductoBatchCard({
@@ -42,6 +43,7 @@ export function ProductoBatchCard({
   onRemove,
   canRemove,
   hideBrandSelector = false,
+  hideConsigSelector = false,
 }: Props) {
   const [open, setOpen] = useState(true);
   const [addingConsig, setAddingConsig] = useState(false);
@@ -223,7 +225,7 @@ export function ProductoBatchCard({
           />
 
           {/* Consignatario vintage */}
-          <div className="border border-[var(--border)] rounded-lg p-4 flex flex-col gap-3">
+          {!hideConsigSelector && <div className="border border-[var(--border)] rounded-lg p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide">
                 Consignatario Vintage (opcional)
@@ -313,7 +315,7 @@ export function ProductoBatchCard({
                 ))}
               </select>
             )}
-          </div>
+          </div>}
 
           {/* Costo de producción */}
           <div className="border border-[var(--border)] rounded-lg p-4 flex flex-col gap-4">

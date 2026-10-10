@@ -4,17 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, ArrowLeft, CheckCircle, Store } from "lucide-react";
+import { Plus, ArrowLeft, CheckCircle, Store, User } from "lucide-react";
 import { batchSchema, type BatchFormValues } from "@/lib/validations/inventario";
 import { useCreateBatch } from "@/hooks/use-productos";
 import { useMarcas } from "@/hooks/use-marcas";
 import { useEmpleados } from "@/hooks/use-empleados";
+import { useConsignatarios } from "@/hooks/use-vintage";
 import { ProductoBatchCard } from "@/components/inventario/producto-batch-card";
 import { Button } from "@/components/ui/button";
 
-function makeDefault(brandId: string): BatchFormValues["products"][0] {
+function makeDefault(brandId: string, consigId = ""): BatchFormValues["products"][0] {
   return {
     brand_id: brandId,
+    consignatario_id: consigId || undefined,
     name: "",
     sku_prefix: "",
     category: "ROPA CONSIGNA",
@@ -33,9 +35,11 @@ export default function EntradaMarcaPage() {
   const [photoFiles, setPhotoFiles] = useState<Record<number, File>>({});
   const [savedSkus, setSavedSkus] = useState<string[] | null>(null);
   const [selectedBrandId, setSelectedBrandId] = useState("");
+  const [selectedConsigId, setSelectedConsigId] = useState("");
 
   const { data: marcas = [] } = useMarcas();
   const { data: empleados = [] } = useEmpleados();
+  const { data: consignatarios = [] } = useConsignatarios();
   const createBatch = useCreateBatch();
 
   const methods = useForm<BatchFormValues>({
@@ -50,10 +54,17 @@ export default function EntradaMarcaPage() {
 
   function handleBrandChange(brandId: string) {
     setSelectedBrandId(brandId);
-    // Sync brand_id on all existing products
     const current = methods.getValues("products");
     current.forEach((_, i) => {
       methods.setValue(`products.${i}.brand_id`, brandId);
+    });
+  }
+
+  function handleConsigChange(consigId: string) {
+    setSelectedConsigId(consigId);
+    const current = methods.getValues("products");
+    current.forEach((_, i) => {
+      methods.setValue(`products.${i}.consignatario_id`, consigId);
     });
   }
 
@@ -75,7 +86,8 @@ export default function EntradaMarcaPage() {
     setSavedSkus(results.flatMap((r) => r.variantSkus));
   }
 
-  const selectedBrand = marcas.find((m) => m.id === selectedBrandId);
+  const selectedBrand  = marcas.find((m) => m.id === selectedBrandId);
+  const selectedConsig = consignatarios.find((c) => c.id === selectedConsigId);
 
   if (savedSkus) {
     return (
@@ -129,26 +141,53 @@ export default function EntradaMarcaPage() {
         </p>
       </div>
 
-      {/* Brand picker */}
-      <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5 mb-4 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">
-          <Store size={18} className="text-[var(--primary)]" />
+      {/* Global pickers */}
+      <div className="bg-[var(--card)] rounded-2xl border border-[var(--border)] p-5 mb-4 flex flex-col gap-4">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-[var(--primary)]/10 flex items-center justify-center flex-shrink-0">
+            <Store size={18} className="text-[var(--primary)]" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide block mb-1">
+              Marca
+            </label>
+            <select
+              value={selectedBrandId}
+              onChange={(e) => handleBrandChange(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+            >
+              <option value="">— Selecciona una marca —</option>
+              {marcas.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="flex-1">
-          <label className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide block mb-1">
-            Marca
-          </label>
-          <select
-            value={selectedBrandId}
-            onChange={(e) => handleBrandChange(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-          >
-            <option value="">— Selecciona una marca —</option>
-            {marcas.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-        </div>
+
+        {consignatarios.length > 0 && (
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-[var(--muted)] flex items-center justify-center flex-shrink-0">
+              <User size={18} className="text-[var(--muted-foreground)]" />
+            </div>
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide block mb-1">
+                Consignatario vintage <span className="font-normal normal-case">(opcional)</span>
+              </label>
+              <select
+                value={selectedConsigId}
+                onChange={(e) => handleConsigChange(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+              >
+                <option value="">— Sin consignatario —</option>
+                {consignatarios.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.initial}) · {c.share_pct}%
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
       </div>
 
       {!selectedBrandId ? (
@@ -168,6 +207,7 @@ export default function EntradaMarcaPage() {
                 photoFiles={photoFiles}
                 onPhotoChange={handlePhotoChange}
                 hideBrandSelector
+                hideConsigSelector={!!selectedConsigId}
                 onRemove={() => {
                   remove(i);
                   setPhotoFiles((prev) => {
@@ -187,7 +227,7 @@ export default function EntradaMarcaPage() {
             <Button
               type="button"
               variant="secondary"
-              onClick={() => append(makeDefault(selectedBrandId))}
+              onClick={() => append(makeDefault(selectedBrandId, selectedConsigId))}
               className="w-full"
             >
               <Plus size={15} />
